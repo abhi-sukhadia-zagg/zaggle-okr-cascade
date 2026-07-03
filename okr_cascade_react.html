@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zaggle OKR Cascade</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef } = React;
+
+// ─── DATA ───
+const NORTH_STAR = {
+  vision: "Become the financial operating system for Indian enterprises - and expand globally",
+  description: "Zaggle will be the category-defining company in spend management. We will win on product depth, platform stickiness, and the ability to expand within accounts over time.",
+  timeline: "FY 2026-27",
+};
+
+const ORG_OKRS = [
+  { id:"ORG-1", theme:"Revenue Growth", objective:"Accelerate revenue growth through new geographies, new segments, and enterprise expansion", timeline:"FY 2026-27",
+    krs:[
+      {id:"KR1",epic:"G",description:"Achieve $XX ARR from UAE market with XX active enterprise clients",measure:"UAE ARR + active client count",target:"$XX ARR",owner:"Enterprise Sales"},
+      {id:"KR2",epic:"G",description:"US market entry strategy approved by Founder; first paying US client signed",measure:"Strategy sign-off + client signed",target:"1 client signed",owner:"Founder's Office"},
+      {id:"KR3",epic:"G",description:"Net new ARR of $XX from SME segment via Xpanse with XXX active SME clients",measure:"Net new ARR (SME)",target:"$XX ARR",owner:"Product"},
+      {id:"KR4",epic:"G",description:"Net new ARR of $XX from new enterprise logos in India",measure:"Net new ARR (India enterprise)",target:"$XX ARR",owner:"Enterprise Sales"},
+      {id:"KR5",epic:"G",description:"Increase Average Revenue Per Account (ARPA) by XX% YoY",measure:"ARPA growth %",target:"+XX% YoY",owner:"Enterprise Sales"},
+    ]},
+  { id:"ORG-2", theme:"Client Retention", objective:"Build a retention engine that protects revenue and converts existing clients into a growth flywheel", timeline:"FY 2026-27",
+    krs:[
+      {id:"KR1",epic:"G",description:"Net Revenue Retention (NRR) reaches >XX%",measure:"NRR %",target:">XX%",owner:"Customer Success"},
+      {id:"KR2",epic:"G",description:"Gross Revenue Churn reduced to <XX%",measure:"Gross revenue churn %",target:"<XX%",owner:"Customer Success"},
+      {id:"KR3",epic:"G",description:"CSAT score consistently >XX% across enterprise base",measure:"CSAT %",target:">XX%",owner:"Customer Success"},
+    ]},
+  { id:"ORG-3", theme:"Profitability", objective:"Improve unit economics and operating leverage to support sustainable growth", timeline:"FY 2026-27",
+    krs:[
+      {id:"KR1",epic:"G",description:"Improve Gross Margin (CM1) by XX percentage points YoY",measure:"CM1 margin % change",target:"+XX pp YoY",owner:"Finance"},
+      {id:"KR2",epic:"G",description:"Improve EBITDA margin by YY percentage points YoY",measure:"EBITDA margin % change",target:"+YY pp YoY",owner:"Finance"},
+      {id:"KR3",epic:"G",description:"Reduce CAC Payback Period from XX months to YY months",measure:"CAC payback period (months)",target:"YY months",owner:"Revenue Operations"},
+    ]},
+  { id:"ORG-4", theme:"Faster Revenue Realization", objective:"Shorten the path from contract signed to revenue recognized", timeline:"FY 2026-27",
+    krs:[{id:"KR1",epic:"G",description:"Reduce average time-to-go-live from XX days to YY days across enterprise deployments",measure:"Avg. days: contract to go-live",target:"YY days",owner:"Implementation"}]},
+  { id:"ORG-5", theme:"Org Capability & Culture", objective:"Build the talent, tooling, and operating muscle to make Zaggle AI-native by FY27", timeline:"FY 2026-27",
+    krs:[
+      {id:"KR1",epic:"G",description:"AI talent density: XX% of new product and engineering hires meet defined AI fluency criteria",measure:"AI-fluent hire %",target:"XX%",owner:"HR"},
+      {id:"KR2",epic:"G",description:"Productivity uplift: XX% improvement in delivery velocity through AI tooling adoption",measure:"Delivery velocity change %",target:"+XX%",owner:"Technology"},
+      {id:"KR5",epic:"G",description:"At least 1 AI-native feature shipped in every Zaggle product",measure:"Count of products with AI-native feature",target:"6 products",owner:"Product"},
+    ]},
+];
+
+const DEPARTMENTS = ["Enterprise Sales","Product","Demand Generation","Customer Success","Customer Support","Revenue Operations","Implementation","Pre-Sales & Solutioning","Partnerships","Founder's Office"];
+
+const DEPT_OKRS = {
+  "Enterprise Sales":[
+    {id:"ES-1",theme:"Pipeline Acceleration",objective:"Build a predictable, high-velocity enterprise pipeline that converts to revenue",timeline:"FY 2026-27",linkedOrgOkr:"ORG-1",
+      krs:[{id:"KR1",epic:"G",description:"Generate qualified enterprise pipeline of $XX (3x annual new ARR target)",measure:"Qualified pipeline value",target:"$XX pipeline",owner:"VP Sales"},{id:"KR2",epic:"G",description:"Reduce average sales cycle from XX days to YY days",measure:"Avg. sales cycle (days)",target:"YY days",owner:"VP Sales"},{id:"KR3",epic:"G",description:"Close $XX in new enterprise ARR from at least XX new logos",measure:"New logo ARR",target:"$XX ARR",owner:"VP Sales"},{id:"KR5",epic:"G",description:"Healthy deal source mix maintained across outbound, inbound, partner, referral",measure:"Deal source % by channel",target:"Defined mix %",owner:"RevOps"}]},
+    {id:"ES-2",theme:"Increase Average Ticket Size",objective:"Land larger deals through pricing discipline and multi-product positioning at point of sale",timeline:"FY 2026-27",linkedOrgOkr:"ORG-1",
+      krs:[{id:"KR1",epic:"G",description:"Increase average new logo ACV from $XX to $YY",measure:"Avg. new logo ACV",target:"$YY ACV",owner:"VP Sales"},{id:"KR2",epic:"G",description:"At least XX% of new logos closed with 2+ Zaggle products at point of sale",measure:"% multi-product new logos",target:"XX%",owner:"VP Sales"},{id:"KR3",epic:"G",description:"Generate $XX in cross-sell revenue from new clients via multi-product deals",measure:"Cross-sell ARR at point of sale",target:"$XX ARR",owner:"VP Sales"},{id:"KR4",epic:"G",description:"Realize pricing increase of XX% per product per client on new contracts from Q2",measure:"% price increase on new contracts",target:"+XX%",owner:"VP Sales"}]},
+    {id:"ES-3",theme:"Conversion",objective:"Improve the efficiency of the sales motion from opportunity to close",timeline:"FY 2026-27",linkedOrgOkr:"ORG-1",
+      krs:[{id:"KR1",epic:"G",description:"Increase enterprise opportunity-to-close conversion rate from XX% to YY%",measure:"Opp-to-close conversion %",target:"YY%",owner:"VP Sales"},{id:"KR2",epic:"G",description:"Demo-to-proposal conversion rate >XX%",measure:"Demo-to-proposal conversion %",target:">XX%",owner:"Pre-Sales"},{id:"KR3",epic:"G",description:"Proposal-to-close conversion rate >YY%",measure:"Proposal-to-close conversion %",target:">YY%",owner:"VP Sales"},{id:"KR4",epic:"G",description:"Win-loss analysis documented for 100% of deals >$XX ACV",measure:"% deals with win-loss doc",target:"100%",owner:"RevOps"}]},
+  ],
+  "Product":[
+    {id:"PRD-1",theme:"Global Expansion Readiness",objective:"Make Zaggle's product suite ready to compete and win in UAE and US markets",timeline:"FY 2026-27",linkedOrgOkr:"ORG-1",
+      krs:[{id:"KR1",epic:"G",description:"UAE-ready product (WPS, VAT, Arabic, UAE labor regulations) live",measure:"UAE compliance features live",target:"100% checklist",owner:"Product Head"},{id:"KR2",epic:"G",description:"100% UAT and customer feedback completed with at least XX UAE clients",measure:"UAT completion + client feedback",target:"XX clients",owner:"Product Head"},{id:"KR3",epic:"G",description:"US market entry product strategy approved by Founder",measure:"Strategy sign-off",target:"Approved",owner:"Product Head"},{id:"KR4",epic:"G",description:"US-ready product MVP shipped for the first client",measure:"MVP shipped",target:"1 client",owner:"Product Head"}]},
+    {id:"PRD-2",theme:"SME Market Entry via Xpanse",objective:"Build and launch India's leading self-serve spend platform; one new module live every 4 weeks",timeline:"FY 2026-27",linkedOrgOkr:"ORG-1",
+      krs:[{id:"KR1",epic:"G",description:"Xpanse core platform layer (auth, onboarding, billing, self-serve admin) live",measure:"Core platform live",target:"Live by Q1",owner:"Product Head"},{id:"KR2",epic:"G",description:"Deliver Xpanse module roadmap on 4-week cadence; minimum XX modules live by Q4",measure:"Modules live by Q4",target:"XX modules",owner:"Product Head"},{id:"KR5",epic:"G",description:"Self-serve activation rate (signup to first transaction) reaches XX% within YY days",measure:"Activation rate %",target:"XX% in YY days",owner:"Product Head"}]},
+  ],
+  "Demand Generation":[
+    {id:"DG-1",theme:"Enterprise Demand",objective:"Generate consistent, high-quality enterprise pipeline to feed sales targets",timeline:"FY 2026-27",linkedOrgOkr:"ORG-1",
+      krs:[{id:"KR1",epic:"G",description:"Generate XX qualified enterprise opportunities per quarter",measure:"Qualified enterprise opps per quarter",target:"XX / quarter",owner:"Demand Gen Head"},{id:"KR2",epic:"G",description:"Marketing-sourced pipeline contributes XX% of total enterprise pipeline",measure:"Marketing-sourced pipeline %",target:"XX%",owner:"Demand Gen Head"},{id:"KR3",epic:"G",description:"Cost per qualified opportunity (CPQO) reduced from $XX to $YY",measure:"CPQO",target:"$YY",owner:"Demand Gen Head"},{id:"KR4",epic:"G",description:"At least XX% of qualified opportunities from priority verticals",measure:"% opps from priority verticals",target:"XX%",owner:"Demand Gen Head"}]},
+    {id:"DG-2",theme:"Global Expansion Demand",objective:"Build market entry demand engines for UAE and US",timeline:"FY 2026-27",linkedOrgOkr:"ORG-1",
+      krs:[{id:"KR1",epic:"G",description:"UAE market entry playbook finalized and signed off",measure:"Playbook approved",target:"Signed off",owner:"Demand Gen Head"},{id:"KR2",epic:"G",description:"Qualified UAE pipeline of $XX",measure:"UAE qualified pipeline value",target:"$XX",owner:"Demand Gen Head"},{id:"KR3",epic:"G",description:"Generate XX UAE first meetings per month from Q2",measure:"UAE first meetings / month",target:"XX / month",owner:"Demand Gen Head"},{id:"KR4",epic:"G",description:"US market entry GTM plan approved",measure:"US GTM plan approval",target:"Approved",owner:"Demand Gen Head"},{id:"KR5",epic:"G",description:"First US qualified pipeline of $XX",measure:"US qualified pipeline value",target:"$XX",owner:"Demand Gen Head"}]},
+  ],
+  "Customer Success":[
+    {id:"CS-1",theme:"Client Retention",objective:"Protect revenue by driving deep adoption, health, and proactive renewal",timeline:"FY 2026-27",linkedOrgOkr:"ORG-2",
+      krs:[{id:"KR1",epic:"G",description:"Net Revenue Retention (NRR) reaches >XX%",measure:"NRR %",target:">XX%",owner:"CS Head"},{id:"KR2",epic:"G",description:"Net Revenue Churn reduced to <XX%",measure:"Net revenue churn %",target:"<XX%",owner:"CS Head"},{id:"KR3",epic:"G",description:"CSAT / NPS Score consistently >XX across enterprise base",measure:"NPS / CSAT score",target:">XX",owner:"CS Head"},{id:"KR4",epic:"G",description:"Customer Health Score maintained at >XX% of accounts in Green tier",measure:"% accounts in Green health tier",target:">XX%",owner:"CS Head"}]},
+    {id:"CS-2",theme:"Expansion Revenue",objective:"Convert healthy accounts into expansion revenue through upsell, cross-sell, and multi-product penetration",timeline:"FY 2026-27",linkedOrgOkr:"ORG-1",
+      krs:[{id:"KR1",epic:"G",description:"Upsell ARR Closed: $XX from upsell / cross-sell deals",measure:"Upsell / cross-sell ARR",target:"$XX ARR",owner:"CS Head"},{id:"KR2",epic:"G",description:"QBR Completion Rate: >XX% of live accounts reviewed quarterly",measure:"QBR completion %",target:">XX%",owner:"CS Head"},{id:"KR3",epic:"G",description:"Referrals Generated: XX referrals from live clients per quarter",measure:"# referrals generated",target:"XX / quarter",owner:"CS Head"}]},
+  ],
+  "Customer Support":[
+    {id:"SUP-1",theme:"Resolution Quality",objective:"Resolve client issues faster and reduce the need for support",timeline:"FY 2026-27",linkedOrgOkr:"ORG-2",
+      krs:[{id:"KR1",epic:"G",description:"XX% of tickets resolved within SLA",measure:"% tickets within SLA",target:"XX%",owner:"Support Head"},{id:"KR2",epic:"G",description:"First Response Time maintained at <XX hours average",measure:"Avg FRT (hours)",target:"<XX hrs",owner:"Support Head"},{id:"KR3",epic:"G",description:"Escalation Rate reduced to <XX%",measure:"Escalation rate %",target:"<XX%",owner:"Support Head"},{id:"KR4",epic:"G",description:"Ticket Backlog maintained at <XX open unresolved tickets at end of week",measure:"Open tickets EOW",target:"<XX",owner:"Support Head"}]},
+  ],
+  "Revenue Operations":[
+    {id:"REVOPS-1",theme:"GTM Efficiency",objective:"Make the GTM engine faster and more predictable",timeline:"FY 2026-27",linkedOrgOkr:"ORG-3",
+      krs:[{id:"KR1",epic:"G",description:"Forecast Accuracy within XX% variance",measure:"Actual / Forecasted ARR %",target:"XX% accuracy",owner:"RevOps Head"},{id:"KR2",epic:"G",description:"Pipeline Coverage Ratio maintained at Xx",measure:"Pipeline / quarterly target",target:"Xx coverage",owner:"RevOps Head"},{id:"KR3",epic:"G",description:"CAC Payback Period reduced from XX to YY months",measure:"CAC payback (months)",target:"YY months",owner:"RevOps Head"},{id:"KR4",epic:"G",description:"CRM Data Hygiene Score >XX%",measure:"% CRM records accurate",target:">XX%",owner:"RevOps Head"}]},
+  ],
+  "Implementation":[
+    {id:"IMPL-1",theme:"Faster Revenue Realization",objective:"Get enterprise clients to first value as fast as possible, with minimal friction, at scale",timeline:"FY 2026-27",linkedOrgOkr:"ORG-4",
+      krs:[{id:"KR1",epic:"G",description:"Reduce average time-to-go-live from XX to YY days",measure:"Avg days: contract to go-live",target:"YY days",owner:"Impl. Head"},{id:"KR2",epic:"G",description:"Go-live Predictability Rate: XX% within agreed timeline",measure:"% on-time go-live",target:"XX%",owner:"Impl. Head"},{id:"KR3",epic:"G",description:"Implementation-stage churn rate <XX%",measure:"Churn during implementation %",target:"<XX%",owner:"Impl. Head"}]},
+  ],
+};
+
+const getOrgOkr = (id) => ORG_OKRS.find(o => o.id === id);
+const getDeptOkrs = (dept) => DEPT_OKRS[dept] || [{id:"PH-1",theme:"TBD",objective:"OKR definition in progress for "+dept,timeline:"FY 2026-27",linkedOrgOkr:null,krs:[]}];
+const getLinkedDeptOkrs = (orgId) => {
+  const r = [];
+  DEPARTMENTS.forEach(d => (DEPT_OKRS[d]||[]).forEach(o => { if(o.linkedOrgOkr===orgId) r.push({dept:d,okr:o}); }));
+  return r;
+};
+
+// ─── COMPONENTS ───
+const GoalIcon = ({size=14,color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 14 14" fill="none" style={{flexShrink:0}}>
+    <circle cx="7" cy="7" r="6" stroke={color} strokeWidth="1.4"/>
+    <circle cx="7" cy="7" r="2.8" stroke={color} strokeWidth="1.4"/>
+    <circle cx="7" cy="7" r=".8" fill={color}/>
+  </svg>
+);
+
+const VLine = ({h=28,color="#F5ADA8"}) => (
+  <div style={{width:2,height:h,background:color,margin:"0 auto",flexShrink:0}}/>
+);
+
+const KRTable = ({krs}) => (
+  <div style={{borderRadius:10,border:"1px solid #E5E7EB",overflow:"hidden",background:"#fff"}}>
+    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+      <thead><tr style={{background:"#DC2626",color:"#fff",fontSize:10.5,textTransform:"uppercase",letterSpacing:".07em"}}>
+        <th style={{padding:"10px 12px",textAlign:"center",width:56}}>KR</th>
+        <th style={{padding:"10px 12px",textAlign:"center",width:70}}>EPIC-G</th>
+        <th style={{padding:"10px 12px",textAlign:"left"}}>Description</th>
+        <th style={{padding:"10px 12px",textAlign:"left"}}>Measure</th>
+        <th style={{padding:"10px 12px",textAlign:"left"}}>Target</th>
+        <th style={{padding:"10px 12px",textAlign:"left"}}>Owner</th>
+      </tr></thead>
+      <tbody>{krs.length ? krs.map(kr => (
+        <tr key={kr.id} style={{borderTop:"1px solid #F3F4F6"}}>
+          <td style={{padding:"12px",textAlign:"center",fontSize:11,fontWeight:700,color:"#fff",background:"#B91C1C"}}>{kr.id}</td>
+          <td style={{padding:"12px",textAlign:"center",fontSize:11,fontWeight:700,color:"#7C4D00",background:"#FEF3D7"}}>{kr.epic||"-"}</td>
+          <td style={{padding:"12px",color:"#111"}}>{kr.description}</td>
+          <td style={{padding:"12px",color:"#6B7280",fontSize:12}}>{kr.measure}</td>
+          <td style={{padding:"12px",fontWeight:600,color:"#111",whiteSpace:"nowrap"}}>{kr.target}</td>
+          <td style={{padding:"12px",color:"#6B7280",fontSize:12,whiteSpace:"nowrap"}}>{kr.owner}</td>
+        </tr>
+      )) : <tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#9CA3AF",fontStyle:"italic"}}>No Key Results defined yet</td></tr>}</tbody>
+    </table>
+  </div>
+);
+
+const DeptGroupColumn = ({dept, okrs, onNavigate}) => (
+  <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:240,flexShrink:0}}>
+    <div style={{border:"2px dashed #E5E7EB",borderRadius:12,overflow:"hidden",background:"#fff",width:240}}>
+      <div style={{background:"#F9FAFB",borderBottom:"1px solid #E5E7EB",padding:"8px 12px",fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:".07em",display:"flex",alignItems:"center",gap:6}}>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" width="4" height="4" rx=".5" fill="currentColor"/><rect y="6" width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" y="6" width="4" height="4" rx=".5" fill="currentColor"/></svg>
+        {dept}
+      </div>
+      <div style={{padding:10,display:"flex",flexDirection:"column",gap:0}}>
+        {okrs.map((okr,i) => (
+          <div key={okr.id}>
+            {i > 0 && <VLine h={18} color="#F5ADA8"/>}
+            <div onClick={() => onNavigate(okr.id, dept)}
+              style={{border:"1px solid #E5E7EB",borderRadius:8,padding:12,cursor:"pointer",transition:"all .15s"}}
+              onMouseOver={e => {e.currentTarget.style.borderColor="#FCA5A5";e.currentTarget.style.boxShadow="0 2px 8px rgba(232,40,26,.08)"}}
+              onMouseOut={e => {e.currentTarget.style.borderColor="#E5E7EB";e.currentTarget.style.boxShadow="none"}}>
+              <div style={{fontSize:11,fontWeight:600,color:"#111",lineHeight:1.35,marginBottom:8}}>{okr.objective}</div>
+              <button onClick={e => {e.stopPropagation(); onNavigate(okr.id, dept);}}
+                style={{fontSize:10,fontWeight:700,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:20,padding:"2px 10px",cursor:"pointer"}}>
+                {okr.krs.length} KRs →
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const OrgHierBlock = ({orgOkr, expanded, onToggle, onNavOrg, onNavDept}) => {
+  const linked = getLinkedDeptOkrs(orgOkr.id);
+  const byDept = {};
+  const deptOrder = [];
+  linked.forEach(({dept,okr}) => { if(!byDept[dept]) { byDept[dept]=[]; deptOrder.push(dept); } byDept[dept].push(okr); });
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+      <div onClick={onToggle}
+        style={{border: expanded ? "2px solid #DC2626" : "2px solid #DC2626", background: expanded ? "#FEF2F2" : "#fff", borderRadius:12, padding:14, width:230, cursor:"pointer", transition:"all .15s", boxShadow: expanded ? "0 4px 16px rgba(220,38,38,.12)" : "none"}}
+        onMouseOver={e => { if(!expanded) e.currentTarget.style.boxShadow="0 4px 16px rgba(220,38,38,.12)"; }}
+        onMouseOut={e => { if(!expanded) e.currentTarget.style.boxShadow="none"; }}>
+        <div style={{fontSize:12,fontWeight:700,color:"#111",lineHeight:1.35,marginBottom:10}}>{orgOkr.objective}</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          <button onClick={e => {e.stopPropagation(); onNavOrg(orgOkr.id);}}
+            style={{fontSize:10,fontWeight:700,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:20,padding:"2px 10px",cursor:"pointer"}}>
+            {orgOkr.krs.length} KRs →
+          </button>
+          <span style={{fontSize:10,color:"#9CA3AF",background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:20,padding:"2px 8px"}}>{linked.length} depts</span>
+        </div>
+      </div>
+
+      {expanded && deptOrder.length > 0 && (
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+          <VLine h={20} color="#DC2626"/>
+          {/* T-bar connector for dept columns */}
+          {(() => {
+            const n = deptOrder.length, cw = 240, g = 20;
+            const totalW = n * cw + (n - 1) * g;
+            return (
+              <div style={{position:"relative",width:totalW,height:20}}>
+                {n > 1 && <div style={{position:"absolute",top:0,left:cw/2,right:cw/2,height:2,background:"#FECACA"}}/>}
+                {Array.from({length:n}).map((_,i) => {
+                  const cx = i * (cw + g) + cw / 2;
+                  return <div key={i} style={{position:"absolute",top:0,left:cx-1,width:2,height:20,background:"#FECACA"}}/>;
+                })}
+              </div>
+            );
+          })()}
+          <div style={{display:"flex",gap:20,alignItems:"flex-start"}}>
+            {deptOrder.map(dept => (
+              <DeptGroupColumn key={dept} dept={dept} okrs={byDept[dept]} onNavigate={onNavDept}/>
+            ))}
+          </div>
+        </div>
+      )}
+      {expanded && deptOrder.length === 0 && (
+        <div style={{fontSize:11,color:"#9CA3AF",marginTop:12}}>No department OKRs linked yet</div>
+      )}
+    </div>
+  );
+};
+
+// ─── MAIN APP ───
+function App() {
+  const [tab, setTab] = useState("ns");
+  const [view, setView] = useState("table");
+  const [selectedOkr, setSelectedOkr] = useState(null);
+  const [selectedDept, setSelectedDept] = useState(DEPARTMENTS[0]);
+  const [expandedOrgs, setExpandedOrgs] = useState(new Set());
+
+  const toggleOrg = (id) => {
+    setExpandedOrgs(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
+  };
+  const navToOrg = (orgId) => { setTab("org"); setView("table"); setSelectedOkr(orgId); };
+  const navToDept = (okrId, dept) => { setTab("dept"); setView("table"); setSelectedDept(dept); setSelectedOkr(okrId); };
+
+  const currentOkrs = tab === "org" ? ORG_OKRS : getDeptOkrs(selectedDept);
+  const activeOkr = currentOkrs.find(o => o.id === selectedOkr);
+  const linkedOrg = activeOkr && activeOkr.linkedOrgOkr ? getOrgOkr(activeOkr.linkedOrgOkr) : null;
+
+  // ─── HIERARCHY VIEW ───
+  if (view === "hierarchy") {
+    return (
+      <div style={{minHeight:"100vh",background:"#F9FAFB"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 24px",borderBottom:"1px solid #E5E7EB",background:"#F9FAFB",position:"sticky",top:0,zIndex:10}}>
+          <span style={{fontSize:12,fontWeight:700,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:".1em"}}>OKR Cascade - Hierarchy View</span>
+          <button onClick={() => setView("table")} style={{fontSize:13,fontWeight:600,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8,padding:"6px 16px",cursor:"pointer"}}>← Back to Table View</button>
+        </div>
+        <div style={{overflowX:"auto",overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"32px 32px 80px"}}>
+          <div style={{display:"inline-flex",flexDirection:"column",alignItems:"center",minWidth:"max-content"}}>
+            <div style={{background:"#1A1A2E",borderRadius:12,padding:"16px 32px",textAlign:"center",width:460,boxShadow:"0 4px 20px rgba(26,26,46,.18)"}}>
+              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".09em",color:"#F5ADA8",marginBottom:6}}>◎ North Star Vision</div>
+              <div style={{fontSize:15,fontWeight:800,color:"#fff",lineHeight:1.35}}>{NORTH_STAR.vision}</div>
+            </div>
+            <VLine h={24} color="#B91C1C"/>
+            {/* T-bar connector: horizontal line center-to-center + vertical drops */}
+            {(() => {
+              const n = ORG_OKRS.length, cw = 230, g = 20;
+              const totalW = n * cw + (n - 1) * g;
+              return (
+                <div style={{position:"relative",width:totalW,height:20}}>
+                  {n > 1 && <div style={{position:"absolute",top:0,left:cw/2,right:cw/2,height:2,background:"#B91C1C",opacity:.5}}/>}
+                  {Array.from({length:n}).map((_,i) => {
+                    const cx = i * (cw + g) + cw / 2;
+                    return <div key={i} style={{position:"absolute",top:0,left:cx-1,width:2,height:20,background:"#B91C1C",opacity:.5}}/>;
+                  })}
+                </div>
+              );
+            })()}
+            <div style={{display:"flex",gap:20,alignItems:"flex-start"}}>
+              {ORG_OKRS.map(o => (
+                <OrgHierBlock key={o.id} orgOkr={o} expanded={expandedOrgs.has(o.id)} onToggle={() => toggleOrg(o.id)} onNavOrg={navToOrg} onNavDept={navToDept}/>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── TABLE VIEW ───
+  const tabStyle = (active) => ({padding:"14px 20px",fontSize:13,fontWeight:600,cursor:"pointer",borderBottom: active?"3px solid #DC2626":"3px solid transparent",color: active?"#DC2626":"#9CA3AF",background:"none",border:"none",borderBottom: active?"3px solid #DC2626":"3px solid transparent"});
+  const viewBtnStyle = (active) => ({padding:"5px 12px",fontSize:12,fontWeight:600,borderRadius:6,cursor:"pointer",border:"none",background: active?"#fff":"transparent",color: active?"#DC2626":"#9CA3AF",boxShadow: active?"0 1px 3px rgba(0,0,0,.08)":"none"});
+
+  return (
+    <div style={{minHeight:"100vh",background:"#F9FAFB",display:"flex",flexDirection:"column"}}>
+      {/* Header */}
+      <div style={{background:"#fff",borderBottom:"3px solid #DC2626",padding:"12px 24px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontSize:18,fontWeight:700,color:"#DC2626"}}>Zaggle</div>
+        <div style={{textAlign:"right"}}><div style={{fontSize:14,fontWeight:700,color:"#111"}}>Objectives and Key Results (OKRs)</div><div style={{fontSize:11,color:"#9CA3AF"}}>FY 2026-27 · Confidential</div></div>
+      </div>
+      {/* Tabs */}
+      <div style={{background:"#fff",borderBottom:"1px solid #E5E7EB",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex"}}>
+          {[["ns","North Star Vision"],["org","Organization OKRs"],["dept","Department OKRs"]].map(([k,l]) => (
+            <button key={k} onClick={() => {setTab(k); setSelectedOkr(null);}} style={tabStyle(tab===k)}>{l}</button>
+          ))}
+        </div>
+        <div style={{display:"flex",background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:8,padding:4,gap:4}}>
+          {[["table","Table"],["hierarchy","Hierarchy"]].map(([k,l]) => (
+            <button key={k} onClick={() => setView(k)} style={viewBtnStyle(view===k)}>{l}</button>
+          ))}
+        </div>
+      </div>
+      {/* Dept sub-tabs */}
+      {tab==="dept" && (
+        <div style={{background:"#fff",borderBottom:"2px solid #E5E7EB",padding:"0 16px",display:"flex",overflowX:"auto"}}>
+          {DEPARTMENTS.map(d => (
+            <button key={d} onClick={() => {setSelectedDept(d); setSelectedOkr(null);}}
+              style={{padding:"10px 16px",fontSize:12,fontWeight:600,whiteSpace:"nowrap",border:"none",background:"none",cursor:"pointer",borderBottom: selectedDept===d?"3px solid #DC2626":"3px solid transparent",color: selectedDept===d?"#DC2626":"#9CA3AF",flexShrink:0}}>{d}</button>
+          ))}
+        </div>
+      )}
+      {/* Sidebar + Content */}
+      <div style={{display:"flex",flex:1,minHeight:0}}>
+        <div style={{width:320,flexShrink:0,background:"#fff",borderRight:"1px solid #E5E7EB",overflowY:"auto"}}>
+          <div style={{padding:"16px 16px 8px",fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"#9CA3AF"}}>
+            {tab==="ns"?"North Star Vision":tab==="org"?"Organization OKRs":selectedDept}
+          </div>
+          {tab==="ns" ? (
+            <div style={{padding:12}}>
+              <div style={{display:"flex",gap:10,alignItems:"flex-start",padding:"10px 12px",background:"#FEF2F2",borderLeft:"3px solid #DC2626",borderRadius:"0 8px 8px 0",cursor:"pointer"}} onClick={() => setSelectedOkr("ns")}>
+                <GoalIcon color="#DC2626"/>
+                <span style={{fontSize:12,fontWeight:600,color:"#111",lineHeight:1.4}}>{NORTH_STAR.vision}</span>
+              </div>
+            </div>
+          ) : currentOkrs.map((okr,i) => (
+            <div key={okr.id}>
+              <div style={{display:"flex",gap:10,alignItems:"flex-start",padding:"12px 16px",cursor:"pointer",borderLeft: selectedOkr===okr.id?"3px solid #DC2626":"3px solid transparent",background: selectedOkr===okr.id?"#FEF2F2":"transparent",transition:"background .12s"}}
+                onClick={() => setSelectedOkr(okr.id)}
+                onMouseOver={e => { if(selectedOkr!==okr.id) e.currentTarget.style.background="#F9FAFB"; }}
+                onMouseOut={e => { if(selectedOkr!==okr.id) e.currentTarget.style.background="transparent"; }}>
+                <GoalIcon size={13} color={selectedOkr===okr.id?"#DC2626":"#9CA3AF"}/>
+                <div>
+                  <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color: selectedOkr===okr.id?"#DC2626":"#9CA3AF",marginBottom:3}}>Objective {i+1}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:"#111",lineHeight:1.4}}>{okr.objective}</div>
+                </div>
+              </div>
+              {i < currentOkrs.length-1 && <div style={{height:1,background:"#F3F4F6",margin:"0 16px"}}/>}
+            </div>
+          ))}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:32}}>
+          {tab==="ns" ? (
+            <div style={{maxWidth:640,margin:"0 auto",background:"#fff",border:"2px solid #DC2626",borderRadius:16,padding:32,boxShadow:"0 2px 12px rgba(220,38,38,.06)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"#DC2626",marginBottom:12}}>
+                <GoalIcon size={13} color="#DC2626"/> North Star Vision · {NORTH_STAR.timeline}
+              </div>
+              <div style={{fontSize:20,fontWeight:800,color:"#111",lineHeight:1.35,marginBottom:16}}>{NORTH_STAR.vision}</div>
+              <div style={{fontSize:14,color:"#6B7280",lineHeight:1.7}}>{NORTH_STAR.description}</div>
+            </div>
+          ) : !activeOkr ? (
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",color:"#9CA3AF",gap:12}}>
+              <GoalIcon size={32} color="#D1D5DB"/>
+              <p style={{fontSize:13}}>Select an OKR from the left to view its Key Results</p>
+            </div>
+          ) : (
+            <div>
+              <h1 style={{fontSize:18,fontWeight:700,color:"#111",marginBottom:8,lineHeight:1.35}}>{activeOkr.objective}</h1>
+              <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+                <span style={{fontSize:11,color:"#6B7280",background:"#F3F4F6",border:"1px solid #E5E7EB",padding:"2px 10px",borderRadius:20}}>Timeline: {activeOkr.timeline}</span>
+                <span style={{fontSize:11,color:"#6B7280",background:"#F3F4F6",border:"1px solid #E5E7EB",padding:"2px 10px",borderRadius:20}}>{activeOkr.krs.length} Key Results</span>
+              </div>
+              {linkedOrg && (
+                <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:12}}>
+                  <span>🔗</span>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color:"#DC2626",marginBottom:4}}>Linked to Org OKR</div>
+                    <span onClick={() => navToOrg(linkedOrg.id)} style={{fontSize:13,fontWeight:600,color:"#111",borderBottom:"1.5px dashed #EF4444",cursor:"pointer"}}>{linkedOrg.objective}</span>
+                  </div>
+                </div>
+              )}
+              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",color:"#9CA3AF",marginBottom:10}}>Key Results</div>
+              <KRTable krs={activeOkr.krs}/>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<App/>, document.getElementById('root'));
+</script>
+</body>
+</html>
