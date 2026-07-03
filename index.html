@@ -214,6 +214,30 @@ const VLine = ({h=28,color="#F5ADA8"}) => (
   <div style={{width:2,height:h,background:color,margin:"0 auto",flexShrink:0}}/>
 );
 
+const CurvedConnectors = ({count, childWidth, gap, height=36, activeIndex=null, activeColor="#DC2626", dimColor="#F5D4D1"}) => {
+  if (count < 1) return null;
+  const totalW = count * childWidth + (count - 1) * gap;
+  const parentX = totalW / 2;
+  return (
+    <svg width={totalW} height={height} style={{display:"block",overflow:"visible"}}>
+      {Array.from({length:count}).map((_,i) => {
+        const childX = i * (childWidth + gap) + childWidth / 2;
+        const isActive = activeIndex === i;
+        const hasActive = activeIndex !== null;
+        const stroke = isActive ? activeColor : (hasActive ? "#F3E4E2" : dimColor);
+        const w = isActive ? 2.5 : 1.5;
+        const midY = height * 0.55;
+        return (
+          <path key={i}
+            d={`M ${parentX} 0 C ${parentX} ${midY}, ${childX} ${midY}, ${childX} ${height}`}
+            stroke={stroke} strokeWidth={w} fill="none" strokeLinecap="round"
+            style={{transition:"stroke .18s, stroke-width .18s"}}/>
+        );
+      })}
+    </svg>
+  );
+};
+
 const SyncIndicator = ({lastSynced, now, syncing, onRefresh, dark}) => (
   <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color: dark ? "#9CA3AF" : "#9CA3AF"}}>
     <span>{syncing ? "Syncing…" : lastSynced ? `Last synced: ${timeAgo(lastSynced, now)}` : ""}</span>
@@ -229,7 +253,14 @@ const KeyResultCell = ({kr}) => {
   return (
     <td style={{padding:"12px",color:"#111",position:"relative",cursor: kr.tooltip ? "help" : "default"}}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      <span style={kr.tooltip ? {borderBottom:"1px dotted #9CA3AF"} : {}}>{kr.keyResult}</span>
+      <div style={{fontSize:14,color:"#111",lineHeight:1.45}}>
+        <span style={kr.tooltip ? {borderBottom:"1px dotted #9CA3AF"} : {}}>{kr.keyResult}</span>
+      </div>
+      {kr.measure && (
+        <div style={{fontSize:12,color:"#6B7280",lineHeight:1.4,marginTop:4,fontStyle:"italic"}}>
+          {kr.measure}
+        </div>
+      )}
       {hover && kr.tooltip && (
         <div style={{position:"absolute",top:"100%",left:12,marginTop:6,maxWidth:340,background:"#111827",color:"#fff",fontSize:12,fontWeight:400,lineHeight:1.5,padding:"10px 12px",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,.25)",zIndex:50,textAlign:"left",whiteSpace:"normal"}}>
           {kr.tooltip}
@@ -239,33 +270,48 @@ const KeyResultCell = ({kr}) => {
   );
 };
 
+const SrNoCell = ({kr}) => (
+  <td style={{padding:"12px 10px",textAlign:"center",background:"#B91C1C",color:"#fff",verticalAlign:"top"}}>
+    <div style={{fontSize:13,fontWeight:700,lineHeight:1.2}}>{kr.srNo || "-"}</div>
+    {kr.epic && (
+      <div style={{marginTop:6,display:"inline-block",fontSize:10,fontWeight:700,letterSpacing:".05em",color:"#7C4D00",background:"#FEF3D7",border:"1px solid #F5D48A",borderRadius:20,padding:"1px 7px"}}>
+        {kr.epic}
+      </div>
+    )}
+  </td>
+);
+
 const KRTable = ({krs}) => (
   <div style={{borderRadius:10,border:"1px solid #E5E7EB",overflow:"visible",background:"#fff"}}>
     <table style={{width:"100%",borderCollapse:"collapse",fontSize:14,tableLayout:"auto"}}>
       <thead><tr style={{background:"#DC2626",color:"#fff",fontSize:12,textTransform:"uppercase",letterSpacing:".07em"}}>
-        <th style={{padding:"10px 12px",textAlign:"center",width:56,borderTopLeftRadius:9}}>Sr. No.</th>
-        <th style={{padding:"10px 12px",textAlign:"center",width:70}}>EPIC-G</th>
+        <th style={{padding:"10px 12px",textAlign:"center",width:68,borderTopLeftRadius:9}}>Sr. No.</th>
         <th style={{padding:"10px 12px",textAlign:"left"}}>Key Result</th>
-        <th style={{padding:"10px 12px",textAlign:"left"}}>Measure</th>
-        <th style={{padding:"10px 12px",textAlign:"left",width:100}}>Target</th>
-        <th style={{padding:"10px 12px",textAlign:"left",width:120,borderTopRightRadius:9}}>Owner</th>
+        <th style={{padding:"10px 12px",textAlign:"left",width:110}}>Target</th>
+        <th style={{padding:"10px 12px",textAlign:"left",width:140,borderTopRightRadius:9}}>Owner</th>
       </tr></thead>
       <tbody>{krs.length ? krs.map((kr,i) => (
         <tr key={i} style={{borderTop:"1px solid #F3F4F6"}}>
-          <td style={{padding:"12px",textAlign:"center",fontSize:13,fontWeight:700,color:"#fff",background:"#B91C1C"}}>{kr.srNo || "-"}</td>
-          <td style={{padding:"12px",textAlign:"center",fontSize:13,fontWeight:700,color:"#7C4D00",background:"#FEF3D7"}}>{kr.epic||"-"}</td>
+          <SrNoCell kr={kr}/>
           <KeyResultCell kr={kr}/>
-          <td style={{padding:"12px",color:"#6B7280",fontSize:13}}>{kr.measure}</td>
-          <td style={{padding:"12px",fontWeight:600,color:"#111",width:100,wordBreak:"break-word"}}>{kr.target}</td>
-          <td style={{padding:"12px",color:"#6B7280",fontSize:13,width:120,wordBreak:"break-word"}}>{kr.owner}</td>
+          <td style={{padding:"12px",fontWeight:700,color:"#111",width:110,wordBreak:"break-word",verticalAlign:"top",fontSize:14}}>{kr.target}</td>
+          <td style={{padding:"12px",width:140,verticalAlign:"top"}}>
+            {kr.owner ? (
+              <span style={{display:"inline-block",fontSize:12,fontWeight:600,color:"#374151",background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:20,padding:"3px 10px",lineHeight:1.3}}>
+                {kr.owner}
+              </span>
+            ) : null}
+          </td>
         </tr>
-      )) : <tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#9CA3AF",fontStyle:"italic"}}>No Key Results defined yet</td></tr>}</tbody>
+      )) : <tr><td colSpan={4} style={{padding:24,textAlign:"center",color:"#9CA3AF",fontStyle:"italic"}}>No Key Results defined yet</td></tr>}</tbody>
     </table>
   </div>
 );
 
-const DeptGroupColumn = ({dept, okrs, onNavigate}) => (
-  <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:240,flexShrink:0}}>
+const DeptGroupColumn = ({dept, okrs, onNavigate, onHoverParent, parentOrgId}) => (
+  <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:240,flexShrink:0}}
+    onMouseEnter={() => onHoverParent && onHoverParent(parentOrgId)}
+    onMouseLeave={() => onHoverParent && onHoverParent(null)}>
     <div style={{border:"2px dashed #E5E7EB",borderRadius:12,overflow:"hidden",background:"#fff",width:240}}>
       <div style={{background:"#F9FAFB",borderBottom:"1px solid #E5E7EB",padding:"8px 12px",fontSize:11,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:".07em",display:"flex",alignItems:"center",gap:6}}>
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" width="4" height="4" rx=".5" fill="currentColor"/><rect y="6" width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" y="6" width="4" height="4" rx=".5" fill="currentColor"/></svg>
@@ -292,16 +338,18 @@ const DeptGroupColumn = ({dept, okrs, onNavigate}) => (
   </div>
 );
 
-const OrgHierBlock = ({orgOkr, expanded, onToggle, onNavOrg, onNavDept, getLinkedDeptOkrs}) => {
+const OrgHierBlock = ({orgOkr, expanded, dimmed, onToggle, onHover, onNavOrg, onNavDept, getLinkedDeptOkrs}) => {
   const linked = getLinkedDeptOkrs(orgOkr.id);
   const byDept = {};
   const deptOrder = [];
   linked.forEach(({dept,okr}) => { if(!byDept[dept]) { byDept[dept]=[]; deptOrder.push(dept); } byDept[dept].push(okr); });
 
   return (
-    <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0,opacity: dimmed ? 0.35 : 1, transition:"opacity .18s"}}
+      onMouseEnter={() => onHover && onHover(orgOkr.id)}
+      onMouseLeave={() => onHover && onHover(null)}>
       <div onClick={onToggle}
-        style={{border: expanded ? "2px solid #DC2626" : "2px solid #DC2626", background: expanded ? "#FEF2F2" : "#fff", borderRadius:12, padding:14, width:230, cursor:"pointer", transition:"all .15s", boxShadow: expanded ? "0 4px 16px rgba(220,38,38,.12)" : "none"}}
+        style={{border:"2px solid #DC2626", background: expanded ? "#FEF2F2" : "#fff", borderRadius:12, padding:14, width:230, cursor:"pointer", transition:"all .15s", boxShadow: expanded ? "0 4px 16px rgba(220,38,38,.12)" : "none"}}
         onMouseOver={e => { if(!expanded) e.currentTarget.style.boxShadow="0 4px 16px rgba(220,38,38,.12)"; }}
         onMouseOut={e => { if(!expanded) e.currentTarget.style.boxShadow="none"; }}>
         <div style={{fontSize:13,fontWeight:700,color:"#111",lineHeight:1.4,marginBottom:10}}>{orgOkr.objective}</div>
@@ -316,23 +364,10 @@ const OrgHierBlock = ({orgOkr, expanded, onToggle, onNavOrg, onNavDept, getLinke
 
       {expanded && deptOrder.length > 0 && (
         <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-          <VLine h={20} color="#DC2626"/>
-          {(() => {
-            const n = deptOrder.length, cw = 240, g = 20;
-            const totalW = n * cw + (n - 1) * g;
-            return (
-              <div style={{position:"relative",width:totalW,height:20}}>
-                {n > 1 && <div style={{position:"absolute",top:0,left:cw/2,right:cw/2,height:2,background:"#FECACA"}}/>}
-                {Array.from({length:n}).map((_,i) => {
-                  const cx = i * (cw + g) + cw / 2;
-                  return <div key={i} style={{position:"absolute",top:0,left:cx-1,width:2,height:20,background:"#FECACA"}}/>;
-                })}
-              </div>
-            );
-          })()}
+          <CurvedConnectors count={deptOrder.length} childWidth={240} gap={20} height={40} activeIndex={null} activeColor="#DC2626" dimColor="#DC2626"/>
           <div style={{display:"flex",gap:20,alignItems:"flex-start"}}>
             {deptOrder.map(dept => (
-              <DeptGroupColumn key={dept} dept={dept} okrs={byDept[dept]} onNavigate={onNavDept}/>
+              <DeptGroupColumn key={dept} dept={dept} okrs={byDept[dept]} onNavigate={onNavDept} onHoverParent={onHover} parentOrgId={orgOkr.id}/>
             ))}
           </div>
         </div>
@@ -437,7 +472,8 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
   const [view, setView] = useState("table");
   const [selectedOkr, setSelectedOkr] = useState(null);
   const [selectedDept, setSelectedDept] = useState(data.departments[0]);
-  const [expandedOrgs, setExpandedOrgs] = useState(new Set());
+  const [expandedOrg, setExpandedOrg] = useState(null);
+  const [hoveredOrg, setHoveredOrg] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const { getOrgOkr, getDeptOkrs, getLinkedDeptOkrs } = useMemo(() => {
@@ -455,7 +491,7 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
   }, [data]);
 
   const toggleOrg = (id) => {
-    setExpandedOrgs(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
+    setExpandedOrg(prev => prev === id ? null : id);
   };
   const navToOrg = (orgId) => { setTab("org"); setView("table"); setSelectedOkr(orgId); };
   const navToDept = (okrId, dept) => { setTab("dept"); setView("table"); setSelectedDept(dept); setSelectedOkr(okrId); };
@@ -481,24 +517,29 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
               <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".09em",color:"#F5ADA8",marginBottom:6}}>◎ North Star Vision</div>
               <div style={{fontSize:16,fontWeight:800,color:"#fff",lineHeight:1.35}}>{data.northStar.vision}</div>
             </div>
-            <VLine h={24} color="#B91C1C"/>
             {(() => {
-              const n = data.orgOkrs.length, cw = 230, g = 20;
-              const totalW = n * cw + (n - 1) * g;
+              const activeOrgId = hoveredOrg || expandedOrg;
+              const activeIdx = activeOrgId ? data.orgOkrs.findIndex(o => o.id === activeOrgId) : -1;
               return (
-                <div style={{position:"relative",width:totalW,height:20}}>
-                  {n > 1 && <div style={{position:"absolute",top:0,left:cw/2,right:cw/2,height:2,background:"#B91C1C",opacity:.5}}/>}
-                  {Array.from({length:n}).map((_,i) => {
-                    const cx = i * (cw + g) + cw / 2;
-                    return <div key={i} style={{position:"absolute",top:0,left:cx-1,width:2,height:20,background:"#B91C1C",opacity:.5}}/>;
-                  })}
-                </div>
+                <CurvedConnectors count={data.orgOkrs.length} childWidth={230} gap={20} height={48}
+                  activeIndex={activeIdx >= 0 ? activeIdx : null}
+                  activeColor="#DC2626" dimColor="#F5D4D1"/>
               );
             })()}
             <div style={{display:"flex",gap:20,alignItems:"flex-start"}}>
-              {data.orgOkrs.map(o => (
-                <OrgHierBlock key={o.id} orgOkr={o} expanded={expandedOrgs.has(o.id)} onToggle={() => toggleOrg(o.id)} onNavOrg={navToOrg} onNavDept={navToDept} getLinkedDeptOkrs={getLinkedDeptOkrs}/>
-              ))}
+              {data.orgOkrs.map(o => {
+                const activeOrgId = hoveredOrg || expandedOrg;
+                const isActive = activeOrgId === o.id;
+                const dimmed = activeOrgId && !isActive;
+                return (
+                  <OrgHierBlock key={o.id} orgOkr={o}
+                    expanded={expandedOrg === o.id}
+                    dimmed={dimmed}
+                    onToggle={() => toggleOrg(o.id)}
+                    onHover={setHoveredOrg}
+                    onNavOrg={navToOrg} onNavDept={navToDept} getLinkedDeptOkrs={getLinkedDeptOkrs}/>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -578,12 +619,14 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
           ))}
         </div>
         )}
-        <div style={{flex:1,overflowY:"auto",padding:32,position:"relative"}}>
+        <div style={{flex:1,overflowY:"auto",padding:32}}>
           {!sidebarOpen && (
-            <button onClick={() => setSidebarOpen(true)} title="Show sidebar"
-              style={{position:"absolute",top:16,left:16,zIndex:5,border:"1px solid #E5E7EB",background:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",color:"#6B7280",fontSize:13,fontWeight:600,boxShadow:"0 1px 3px rgba(0,0,0,.06)",display:"flex",alignItems:"center",gap:6}}>
-              »<span style={{fontSize:11,textTransform:"uppercase",letterSpacing:".06em"}}>Objectives</span>
-            </button>
+            <div style={{marginBottom:16}}>
+              <button onClick={() => setSidebarOpen(true)} title="Show sidebar"
+                style={{border:"1px solid #E5E7EB",background:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",color:"#6B7280",fontSize:13,fontWeight:600,boxShadow:"0 1px 3px rgba(0,0,0,.06)",display:"inline-flex",alignItems:"center",gap:6}}>
+                »<span style={{fontSize:11,textTransform:"uppercase",letterSpacing:".06em"}}>Objectives</span>
+              </button>
+            </div>
           )}
           {tab==="ns" ? (
             <div style={{maxWidth:640,margin:"0 auto",background:"#fff",border:"2px solid #DC2626",borderRadius:16,padding:32,boxShadow:"0 2px 12px rgba(220,38,38,.06)"}}>
