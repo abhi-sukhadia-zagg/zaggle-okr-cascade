@@ -224,14 +224,14 @@ const SyncIndicator = ({lastSynced, now, syncing, onRefresh, dark}) => (
   </div>
 );
 
-const SrNoCell = ({kr}) => {
+const KeyResultCell = ({kr}) => {
   const [hover, setHover] = useState(false);
   return (
-    <td style={{padding:"12px",textAlign:"center",fontSize:11,fontWeight:700,color:"#fff",background:"#B91C1C",position:"relative",cursor: kr.tooltip ? "help" : "default"}}
+    <td style={{padding:"12px",color:"#111",position:"relative",cursor: kr.tooltip ? "help" : "default"}}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      {kr.srNo || "-"}
+      <span style={kr.tooltip ? {borderBottom:"1px dotted #9CA3AF"} : {}}>{kr.keyResult}</span>
       {hover && kr.tooltip && (
-        <div style={{position:"absolute",top:"100%",left:"50%",transform:"translateX(-50%)",marginTop:6,width:220,background:"#111827",color:"#fff",fontSize:11,fontWeight:400,lineHeight:1.5,padding:"8px 10px",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,.25)",zIndex:50,textAlign:"left",whiteSpace:"normal"}}>
+        <div style={{position:"absolute",top:"100%",left:12,marginTop:6,maxWidth:340,background:"#111827",color:"#fff",fontSize:12,fontWeight:400,lineHeight:1.5,padding:"10px 12px",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,.25)",zIndex:50,textAlign:"left",whiteSpace:"normal"}}>
           {kr.tooltip}
         </div>
       )}
@@ -241,23 +241,23 @@ const SrNoCell = ({kr}) => {
 
 const KRTable = ({krs}) => (
   <div style={{borderRadius:10,border:"1px solid #E5E7EB",overflow:"visible",background:"#fff"}}>
-    <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
+    <table style={{width:"100%",borderCollapse:"collapse",fontSize:14,tableLayout:"auto"}}>
       <thead><tr style={{background:"#DC2626",color:"#fff",fontSize:12,textTransform:"uppercase",letterSpacing:".07em"}}>
         <th style={{padding:"10px 12px",textAlign:"center",width:56,borderTopLeftRadius:9}}>Sr. No.</th>
         <th style={{padding:"10px 12px",textAlign:"center",width:70}}>EPIC-G</th>
         <th style={{padding:"10px 12px",textAlign:"left"}}>Key Result</th>
         <th style={{padding:"10px 12px",textAlign:"left"}}>Measure</th>
-        <th style={{padding:"10px 12px",textAlign:"left"}}>Target</th>
-        <th style={{padding:"10px 12px",textAlign:"left",borderTopRightRadius:9}}>Owner</th>
+        <th style={{padding:"10px 12px",textAlign:"left",width:100}}>Target</th>
+        <th style={{padding:"10px 12px",textAlign:"left",width:120,borderTopRightRadius:9}}>Owner</th>
       </tr></thead>
       <tbody>{krs.length ? krs.map((kr,i) => (
         <tr key={i} style={{borderTop:"1px solid #F3F4F6"}}>
-          <SrNoCell kr={kr}/>
+          <td style={{padding:"12px",textAlign:"center",fontSize:13,fontWeight:700,color:"#fff",background:"#B91C1C"}}>{kr.srNo || "-"}</td>
           <td style={{padding:"12px",textAlign:"center",fontSize:13,fontWeight:700,color:"#7C4D00",background:"#FEF3D7"}}>{kr.epic||"-"}</td>
-          <td style={{padding:"12px",color:"#111"}}>{kr.keyResult}</td>
+          <KeyResultCell kr={kr}/>
           <td style={{padding:"12px",color:"#6B7280",fontSize:13}}>{kr.measure}</td>
-          <td style={{padding:"12px",fontWeight:600,color:"#111",whiteSpace:"nowrap"}}>{kr.target}</td>
-          <td style={{padding:"12px",color:"#6B7280",fontSize:13,whiteSpace:"nowrap"}}>{kr.owner}</td>
+          <td style={{padding:"12px",fontWeight:600,color:"#111",width:100,wordBreak:"break-word"}}>{kr.target}</td>
+          <td style={{padding:"12px",color:"#6B7280",fontSize:13,width:120,wordBreak:"break-word"}}>{kr.owner}</td>
         </tr>
       )) : <tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#9CA3AF",fontStyle:"italic"}}>No Key Results defined yet</td></tr>}</tbody>
     </table>
@@ -438,6 +438,7 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
   const [selectedOkr, setSelectedOkr] = useState(null);
   const [selectedDept, setSelectedDept] = useState(data.departments[0]);
   const [expandedOrgs, setExpandedOrgs] = useState(new Set());
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const { getOrgOkr, getDeptOkrs, getLinkedDeptOkrs } = useMemo(() => {
     const getOrgOkr = (id) => data.orgOkrs.find(o => o.id === id);
@@ -544,9 +545,14 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
       )}
       {/* Sidebar + Content */}
       <div style={{display:"flex",flex:1,minHeight:0}}>
+        {sidebarOpen && (
         <div style={{width:320,flexShrink:0,background:"#fff",borderRight:"1px solid #E5E7EB",overflowY:"auto"}}>
-          <div style={{padding:"16px 16px 8px",fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"#9CA3AF"}}>
-            {tab==="ns"?"North Star Vision":tab==="org"?"Organization OKRs":selectedDept}
+          <div style={{padding:"16px 16px 8px",fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"#9CA3AF",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+            <span>{tab==="ns"?"North Star Vision":tab==="org"?"Organization OKRs":selectedDept}</span>
+            <button onClick={() => setSidebarOpen(false)} title="Hide sidebar"
+              style={{border:"1px solid #E5E7EB",background:"#fff",borderRadius:6,padding:"3px 7px",cursor:"pointer",color:"#6B7280",fontSize:14,lineHeight:1}}>
+              «
+            </button>
           </div>
           {tab==="ns" ? (
             <div style={{padding:12}}>
@@ -571,7 +577,14 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
             </div>
           ))}
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:32}}>
+        )}
+        <div style={{flex:1,overflowY:"auto",padding:32,position:"relative"}}>
+          {!sidebarOpen && (
+            <button onClick={() => setSidebarOpen(true)} title="Show sidebar"
+              style={{position:"absolute",top:16,left:16,zIndex:5,border:"1px solid #E5E7EB",background:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",color:"#6B7280",fontSize:13,fontWeight:600,boxShadow:"0 1px 3px rgba(0,0,0,.06)",display:"flex",alignItems:"center",gap:6}}>
+              »<span style={{fontSize:11,textTransform:"uppercase",letterSpacing:".06em"}}>Objectives</span>
+            </button>
+          )}
           {tab==="ns" ? (
             <div style={{maxWidth:640,margin:"0 auto",background:"#fff",border:"2px solid #DC2626",borderRadius:16,padding:32,boxShadow:"0 2px 12px rgba(220,38,38,.06)"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"#DC2626",marginBottom:12}}>
