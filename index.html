@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zaggle OKR Cascade</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+
+// ─── CONFIG ───
+// Paste your OneDrive share link for OKR_Cascade_Data_Input.xlsx below.
+// The file must be shared with "Anyone with the link can view".
+// Option A (recommended): relative path when Excel is committed to the same GitHub repo
+const ONEDRIVE_SHARE_URL = "./OKR_Cascade_Data_Input_final.xlsx";
+// Option B: personal OneDrive share link (not corporate SharePoint — CORS blocks those)
+// const ONEDRIVE_SHARE_URL = "https://1drv.ms/x/s!AbcDef...";
+
+const AUTO_REFRESH_MS = 60000;
+const REQUIRED_SHEETS = ["North Star", "Org OKRs", "Dept OKRs", "Departments"];
+
+// ─── ONEDRIVE URL CONVERSION ───
+function toDirectDownloadUrl(shareUrl) {
+  const trimmed = (shareUrl || "").trim();
+  if (!trimmed) return null;
+  // Relative path or non-http URL — use as-is (works for same-repo GitHub Pages hosting)
+  if (!trimmed.startsWith("http")) return trimmed;
+  // Already a direct-download style link
+  if (/[?&]download=1/i.test(trimmed) || /^https:\/\/api\.onedrive\.com\//i.test(trimmed)) {
+    return trimmed;
+  }
+  // SharePoint / OneDrive share link with ?e= token — append &download=1
+  if (/[?&]e=/i.test(trimmed)) {
+    const sep = trimmed.includes("?") ? "&" : "?";
+    return trimmed + sep + "download=1";
+  }
+  // Generic OneDrive share link -> base64-encode per Microsoft's shares API scheme
+  const base64 = btoa(unescape(encodeURIComponent(trimmed)))
+    .replace(/=+$/, "")
+    .replace(/\//g, "_")
+    .replace(/\+/g, "-");
+  return `https://api.onedrive.com/v1.0/shares/u!${base64}/root/content`;
+}
+
+// ─── PARSING ───
+const cell = (v) => (v === undefined || v === null ? "" : String(v).trim());
+
+function groupRows(rows, { idField, carryFields, buildKr }) {
+  const order = [];
+  const byId = {};
+  let currentId = null;
+  let carried = {};
+  rows.forEach((raw) => {
+    const id = cell(raw[idField]);
+    if (!id) return;
+    if (id !== currentId) { currentId = id; carried = {}; }
+    if (!byId[id]) { byId[id] = { id, krs: [] }; order.push(id); }
+    const g = byId[id];
+    carryFields.forEach((f) => {
+      const v = cell(raw[f]);
+      if (v) { g[f] = v; carried[f] = v; }
+      else if (g[f] === undefined && carried[f] !== undefined) { g[f] = carried[f]; }
+    });
+    g.krs.push(buildKr(raw));
+  });
+  return order.map((id) => byId[id]);
+}
+
+const buildKr = (r) => ({
+  srNo: cell(r["Sr. No."]),
+  epic: cell(r["EPIC-G"]),
+  keyResult: cell(r["Key Result"]),
+  tooltip: cell(r["KR Tooltip"]),
+  measure: cell(r["Measure"]),
+  target: cell(r["Target"]),
+  owner: cell(r["KR Owner"]),
+});
+
+function parseWorkbook(wb) {
+  const missing = REQUIRED_SHEETS.filter((s) => !wb.SheetNames.includes(s));
+  if (missing.length) {
+    throw { kind: "structure", detail: `Missing sheet(s): ${missing.join(", ")}` };
+  }
+  const sheet = (name) => XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: "" });
+
+  const nsRow = sheet("North Star")[0] || {};
+  const northStar = {
+    vision: cell(nsRow["Vision Statement"]),
+    description: cell(nsRow["Description"]),
+    timeline: cell(nsRow["Timeline"]),
+  };
+  if (!northStar.vision) {
+    throw { kind: "structure", detail: `"North Star" sheet is missing a "Vision Statement" value.` };
+  }
+
+  const orgOkrs = groupRows(sheet("Org OKRs"), {
+    idField: "Org OKR ID",
+    carryFields: ["Objective", "Timeline"],
+    buildKr,
+  }).map((g) => {
+    g.krs.sort((a, b) => Number(a.srNo) - Number(b.srNo));
+    return { id: g.id, objective: g["Objective"] || "", timeline: g["Timeline"] || "", krs: g.krs };
+  });
+  if (!orgOkrs.length) {
+    throw { kind: "structure", detail: `"Org OKRs" sheet has no rows.` };
+  }
+
+  const deptGroups = groupRows(sheet("Dept OKRs"), {
+    idField: "Dept OKR ID",
+    carryFields: ["Department", "Objective", "Timeline", "Linked Org OKR ID"],
+    buildKr,
+  }).map((g) => {
+    g.krs.sort((a, b) => Number(a.srNo) - Number(b.srNo));
+    return {
+      id: g.id,
+      department: g["Department"] || "",
+      objective: g["Objective"] || "",
+      timeline: g["Timeline"] || "",
+      linkedOrgOkr: g["Linked Org OKR ID"] || "",
+      krs: g.krs,
+    };
+  });
+
+  const deptOkrsByDept = {};
+  deptGroups.forEach((o) => {
+    if (!o.department) return;
+    if (!deptOkrsByDept[o.department]) deptOkrsByDept[o.department] = [];
+    deptOkrsByDept[o.department].push(o);
+  });
+
+  const declaredDepts = sheet("Departments")
+    .filter((r) => cell(r["Department Name"]))
+    .map((r) => ({ name: cell(r["Department Name"]), order: Number(r["Display Order"]) || 0 }))
+    .sort((a, b) => a.order - b.order);
+  if (!declaredDepts.length) {
+    throw { kind: "structure", detail: `"Departments" sheet has no rows.` };
+  }
+
+  const declaredNames = declaredDepts.map((d) => d.name);
+  const extraNames = Object.keys(deptOkrsByDept).filter((n) => !declaredNames.includes(n)).sort();
+  const departments = [...declaredNames, ...extraNames];
+
+  return { northStar, orgOkrs, departments, deptOkrsByDept };
+}
+
+function timeAgo(ts, now) {
+  if (!ts) return "";
+  const diffSec = Math.max(0, Math.round((now - ts) / 1000));
+  if (diffSec < 5) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.round(diffMin / 60);
+  return `${diffHr}h ago`;
+}
+
+// ─── SHARED COMPONENTS ───
+const GoalIcon = ({size=14,color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 14 14" fill="none" style={{flexShrink:0}}>
+    <circle cx="7" cy="7" r="6" stroke={color} strokeWidth="1.4"/>
+    <circle cx="7" cy="7" r="2.8" stroke={color} strokeWidth="1.4"/>
+    <circle cx="7" cy="7" r=".8" fill={color}/>
+  </svg>
+);
+
+const VLine = ({h=28,color="#F5ADA8"}) => (
+  <div style={{width:2,height:h,background:color,margin:"0 auto",flexShrink:0}}/>
+);
+
+const SyncIndicator = ({lastSynced, now, syncing, onRefresh, dark}) => (
+  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color: dark ? "#9CA3AF" : "#9CA3AF"}}>
+    <span>{syncing ? "Syncing…" : lastSynced ? `Last synced: ${timeAgo(lastSynced, now)}` : ""}</span>
+    <button onClick={onRefresh} title="Refresh now"
+      style={{border:"none",background:"none",cursor:"pointer",color:"#DC2626",fontSize:13,lineHeight:1,padding:2}}>
+      ⟳
+    </button>
+  </div>
+);
+
+const SrNoCell = ({kr}) => {
+  const [hover, setHover] = useState(false);
+  return (
+    <td style={{padding:"12px",textAlign:"center",fontSize:11,fontWeight:700,color:"#fff",background:"#B91C1C",position:"relative",cursor: kr.tooltip ? "help" : "default"}}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      {kr.srNo || "-"}
+      {hover && kr.tooltip && (
+        <div style={{position:"absolute",top:"100%",left:"50%",transform:"translateX(-50%)",marginTop:6,width:220,background:"#111827",color:"#fff",fontSize:11,fontWeight:400,lineHeight:1.5,padding:"8px 10px",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,.25)",zIndex:50,textAlign:"left",whiteSpace:"normal"}}>
+          {kr.tooltip}
+        </div>
+      )}
+    </td>
+  );
+};
+
+const KRTable = ({krs}) => (
+  <div style={{borderRadius:10,border:"1px solid #E5E7EB",overflow:"visible",background:"#fff"}}>
+    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+      <thead><tr style={{background:"#DC2626",color:"#fff",fontSize:10.5,textTransform:"uppercase",letterSpacing:".07em"}}>
+        <th style={{padding:"10px 12px",textAlign:"center",width:56,borderTopLeftRadius:9}}>Sr. No.</th>
+        <th style={{padding:"10px 12px",textAlign:"center",width:70}}>EPIC-G</th>
+        <th style={{padding:"10px 12px",textAlign:"left"}}>Key Result</th>
+        <th style={{padding:"10px 12px",textAlign:"left"}}>Measure</th>
+        <th style={{padding:"10px 12px",textAlign:"left"}}>Target</th>
+        <th style={{padding:"10px 12px",textAlign:"left",borderTopRightRadius:9}}>Owner</th>
+      </tr></thead>
+      <tbody>{krs.length ? krs.map((kr,i) => (
+        <tr key={i} style={{borderTop:"1px solid #F3F4F6"}}>
+          <SrNoCell kr={kr}/>
+          <td style={{padding:"12px",textAlign:"center",fontSize:11,fontWeight:700,color:"#7C4D00",background:"#FEF3D7"}}>{kr.epic||"-"}</td>
+          <td style={{padding:"12px",color:"#111"}}>{kr.keyResult}</td>
+          <td style={{padding:"12px",color:"#6B7280",fontSize:12}}>{kr.measure}</td>
+          <td style={{padding:"12px",fontWeight:600,color:"#111",whiteSpace:"nowrap"}}>{kr.target}</td>
+          <td style={{padding:"12px",color:"#6B7280",fontSize:12,whiteSpace:"nowrap"}}>{kr.owner}</td>
+        </tr>
+      )) : <tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#9CA3AF",fontStyle:"italic"}}>No Key Results defined yet</td></tr>}</tbody>
+    </table>
+  </div>
+);
+
+const DeptGroupColumn = ({dept, okrs, onNavigate}) => (
+  <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:240,flexShrink:0}}>
+    <div style={{border:"2px dashed #E5E7EB",borderRadius:12,overflow:"hidden",background:"#fff",width:240}}>
+      <div style={{background:"#F9FAFB",borderBottom:"1px solid #E5E7EB",padding:"8px 12px",fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:".07em",display:"flex",alignItems:"center",gap:6}}>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" width="4" height="4" rx=".5" fill="currentColor"/><rect y="6" width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" y="6" width="4" height="4" rx=".5" fill="currentColor"/></svg>
+        {dept}
+      </div>
+      <div style={{padding:10,display:"flex",flexDirection:"column",gap:0}}>
+        {okrs.map((okr,i) => (
+          <div key={okr.id}>
+            {i > 0 && <VLine h={18} color="#F5ADA8"/>}
+            <div onClick={() => onNavigate(okr.id, dept)}
+              style={{border:"1px solid #E5E7EB",borderRadius:8,padding:12,cursor:"pointer",transition:"all .15s"}}
+              onMouseOver={e => {e.currentTarget.style.borderColor="#FCA5A5";e.currentTarget.style.boxShadow="0 2px 8px rgba(232,40,26,.08)"}}
+              onMouseOut={e => {e.currentTarget.style.borderColor="#E5E7EB";e.currentTarget.style.boxShadow="none"}}>
+              <div style={{fontSize:11,fontWeight:600,color:"#111",lineHeight:1.35,marginBottom:8}}>{okr.objective}</div>
+              <button onClick={e => {e.stopPropagation(); onNavigate(okr.id, dept);}}
+                style={{fontSize:10,fontWeight:700,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:20,padding:"2px 10px",cursor:"pointer"}}>
+                {okr.krs.length} KRs →
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const OrgHierBlock = ({orgOkr, expanded, onToggle, onNavOrg, onNavDept, getLinkedDeptOkrs}) => {
+  const linked = getLinkedDeptOkrs(orgOkr.id);
+  const byDept = {};
+  const deptOrder = [];
+  linked.forEach(({dept,okr}) => { if(!byDept[dept]) { byDept[dept]=[]; deptOrder.push(dept); } byDept[dept].push(okr); });
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+      <div onClick={onToggle}
+        style={{border: expanded ? "2px solid #DC2626" : "2px solid #DC2626", background: expanded ? "#FEF2F2" : "#fff", borderRadius:12, padding:14, width:230, cursor:"pointer", transition:"all .15s", boxShadow: expanded ? "0 4px 16px rgba(220,38,38,.12)" : "none"}}
+        onMouseOver={e => { if(!expanded) e.currentTarget.style.boxShadow="0 4px 16px rgba(220,38,38,.12)"; }}
+        onMouseOut={e => { if(!expanded) e.currentTarget.style.boxShadow="none"; }}>
+        <div style={{fontSize:12,fontWeight:700,color:"#111",lineHeight:1.35,marginBottom:10}}>{orgOkr.objective}</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          <button onClick={e => {e.stopPropagation(); onNavOrg(orgOkr.id);}}
+            style={{fontSize:10,fontWeight:700,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:20,padding:"2px 10px",cursor:"pointer"}}>
+            {orgOkr.krs.length} KRs →
+          </button>
+          <span style={{fontSize:10,color:"#9CA3AF",background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:20,padding:"2px 8px"}}>{linked.length} depts</span>
+        </div>
+      </div>
+
+      {expanded && deptOrder.length > 0 && (
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+          <VLine h={20} color="#DC2626"/>
+          {(() => {
+            const n = deptOrder.length, cw = 240, g = 20;
+            const totalW = n * cw + (n - 1) * g;
+            return (
+              <div style={{position:"relative",width:totalW,height:20}}>
+                {n > 1 && <div style={{position:"absolute",top:0,left:cw/2,right:cw/2,height:2,background:"#FECACA"}}/>}
+                {Array.from({length:n}).map((_,i) => {
+                  const cx = i * (cw + g) + cw / 2;
+                  return <div key={i} style={{position:"absolute",top:0,left:cx-1,width:2,height:20,background:"#FECACA"}}/>;
+                })}
+              </div>
+            );
+          })()}
+          <div style={{display:"flex",gap:20,alignItems:"flex-start"}}>
+            {deptOrder.map(dept => (
+              <DeptGroupColumn key={dept} dept={dept} okrs={byDept[dept]} onNavigate={onNavDept}/>
+            ))}
+          </div>
+        </div>
+      )}
+      {expanded && deptOrder.length === 0 && (
+        <div style={{fontSize:11,color:"#9CA3AF",marginTop:12}}>No department OKRs linked yet</div>
+      )}
+    </div>
+  );
+};
+
+// ─── LOADING / ERROR SCREENS ───
+const CenteredScreen = ({children}) => (
+  <div style={{minHeight:"100vh",background:"#F9FAFB",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+    <div style={{maxWidth:480,width:"100%",background:"#fff",border:"1px solid #E5E7EB",borderRadius:16,padding:32,textAlign:"center",boxShadow:"0 2px 12px rgba(0,0,0,.04)"}}>
+      {children}
+    </div>
+  </div>
+);
+
+const LoadingScreen = () => (
+  <CenteredScreen>
+    <div style={{fontSize:22,fontWeight:800,color:"#DC2626",marginBottom:8}}>Zaggle</div>
+    <div style={{fontSize:14,color:"#6B7280"}}>Loading OKR data…</div>
+  </CenteredScreen>
+);
+
+const ERROR_COPY = {
+  config: {
+    title: "Configuration needed",
+    body: `Set the ONEDRIVE_SHARE_URL variable near the top of this file to your OneDrive share link for OKR_Cascade_Data_Input.xlsx.`,
+  },
+  fetch: {
+    title: "Couldn't load the OKR data",
+    body: `Check that the OneDrive file is shared as "Anyone with the link can view", that the link is correct, and that you're online. Then try again.`,
+  },
+  structure: {
+    title: "Unexpected file structure",
+    body: `The Excel file doesn't match the expected template. Make sure you're using the OKR_Cascade_Data_Input.xlsx template and haven't renamed any sheets or columns.`,
+  },
+  unknown: {
+    title: "Something went wrong",
+    body: `An unexpected error occurred while loading the OKR data.`,
+  },
+};
+
+const ErrorScreen = ({info, onRetry}) => {
+  const kind = (info && info.kind) || "unknown";
+  const copy = ERROR_COPY[kind] || ERROR_COPY.unknown;
+  return (
+    <CenteredScreen>
+      <div style={{fontSize:22,fontWeight:800,color:"#DC2626",marginBottom:16}}>Zaggle</div>
+      <div style={{fontSize:16,fontWeight:700,color:"#111",marginBottom:8}}>{copy.title}</div>
+      <div style={{fontSize:13,color:"#6B7280",lineHeight:1.6,marginBottom:12}}>{copy.body}</div>
+      {info && info.detail && (
+        <div style={{fontSize:11,color:"#9CA3AF",background:"#F9FAFB",border:"1px solid #E5E7EB",borderRadius:8,padding:"8px 10px",marginBottom:16,textAlign:"left",wordBreak:"break-word"}}>{info.detail}</div>
+      )}
+      <button onClick={onRetry} style={{fontSize:13,fontWeight:600,color:"#fff",background:"#DC2626",border:"none",borderRadius:8,padding:"8px 20px",cursor:"pointer"}}>
+        Try Again
+      </button>
+    </CenteredScreen>
+  );
+};
+
+// ─── MAIN APP (data-driven) ───
+function MainApp({data, lastSynced, now, syncing, onRefresh}) {
+  const [tab, setTab] = useState("ns");
+  const [view, setView] = useState("table");
+  const [selectedOkr, setSelectedOkr] = useState(null);
+  const [selectedDept, setSelectedDept] = useState(data.departments[0]);
+  const [expandedOrgs, setExpandedOrgs] = useState(new Set());
+
+  const { getOrgOkr, getDeptOkrs, getLinkedDeptOkrs } = useMemo(() => {
+    const getOrgOkr = (id) => data.orgOkrs.find(o => o.id === id);
+    const getDeptOkrs = (dept) => {
+      const list = data.deptOkrsByDept[dept];
+      return (list && list.length) ? list : [{id:"PH-1",objective:"OKR definition in progress for "+dept,timeline:data.northStar.timeline||"",linkedOrgOkr:null,krs:[]}];
+    };
+    const getLinkedDeptOkrs = (orgId) => {
+      const r = [];
+      data.departments.forEach(d => (data.deptOkrsByDept[d]||[]).forEach(o => { if(o.linkedOrgOkr===orgId) r.push({dept:d,okr:o}); }));
+      return r;
+    };
+    return { getOrgOkr, getDeptOkrs, getLinkedDeptOkrs };
+  }, [data]);
+
+  const toggleOrg = (id) => {
+    setExpandedOrgs(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
+  };
+  const navToOrg = (orgId) => { setTab("org"); setView("table"); setSelectedOkr(orgId); };
+  const navToDept = (okrId, dept) => { setTab("dept"); setView("table"); setSelectedDept(dept); setSelectedOkr(okrId); };
+
+  const currentOkrs = tab === "org" ? data.orgOkrs : getDeptOkrs(selectedDept);
+  const activeOkr = currentOkrs.find(o => o.id === selectedOkr);
+  const linkedOrg = activeOkr && activeOkr.linkedOrgOkr ? getOrgOkr(activeOkr.linkedOrgOkr) : null;
+
+  // ─── HIERARCHY VIEW ───
+  if (view === "hierarchy") {
+    return (
+      <div style={{minHeight:"100vh",background:"#F9FAFB"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 24px",borderBottom:"1px solid #E5E7EB",background:"#F9FAFB",position:"sticky",top:0,zIndex:10}}>
+          <span style={{fontSize:12,fontWeight:700,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:".1em"}}>OKR Cascade - Hierarchy View</span>
+          <div style={{display:"flex",alignItems:"center",gap:16}}>
+            <SyncIndicator lastSynced={lastSynced} now={now} syncing={syncing} onRefresh={onRefresh}/>
+            <button onClick={() => setView("table")} style={{fontSize:13,fontWeight:600,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8,padding:"6px 16px",cursor:"pointer"}}>← Back to Table View</button>
+          </div>
+        </div>
+        <div style={{overflowX:"auto",overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"32px 32px 80px"}}>
+          <div style={{display:"inline-flex",flexDirection:"column",alignItems:"center",minWidth:"max-content"}}>
+            <div style={{background:"#1A1A2E",borderRadius:12,padding:"16px 32px",textAlign:"center",width:460,boxShadow:"0 4px 20px rgba(26,26,46,.18)"}}>
+              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".09em",color:"#F5ADA8",marginBottom:6}}>◎ North Star Vision</div>
+              <div style={{fontSize:15,fontWeight:800,color:"#fff",lineHeight:1.35}}>{data.northStar.vision}</div>
+            </div>
+            <VLine h={24} color="#B91C1C"/>
+            {(() => {
+              const n = data.orgOkrs.length, cw = 230, g = 20;
+              const totalW = n * cw + (n - 1) * g;
+              return (
+                <div style={{position:"relative",width:totalW,height:20}}>
+                  {n > 1 && <div style={{position:"absolute",top:0,left:cw/2,right:cw/2,height:2,background:"#B91C1C",opacity:.5}}/>}
+                  {Array.from({length:n}).map((_,i) => {
+                    const cx = i * (cw + g) + cw / 2;
+                    return <div key={i} style={{position:"absolute",top:0,left:cx-1,width:2,height:20,background:"#B91C1C",opacity:.5}}/>;
+                  })}
+                </div>
+              );
+            })()}
+            <div style={{display:"flex",gap:20,alignItems:"flex-start"}}>
+              {data.orgOkrs.map(o => (
+                <OrgHierBlock key={o.id} orgOkr={o} expanded={expandedOrgs.has(o.id)} onToggle={() => toggleOrg(o.id)} onNavOrg={navToOrg} onNavDept={navToDept} getLinkedDeptOkrs={getLinkedDeptOkrs}/>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── TABLE VIEW ───
+  const tabStyle = (active) => ({padding:"14px 20px",fontSize:13,fontWeight:600,cursor:"pointer",color: active?"#DC2626":"#9CA3AF",background:"none",border:"none",borderBottom: active?"3px solid #DC2626":"3px solid transparent"});
+  const viewBtnStyle = (active) => ({padding:"5px 12px",fontSize:12,fontWeight:600,borderRadius:6,cursor:"pointer",border:"none",background: active?"#fff":"transparent",color: active?"#DC2626":"#9CA3AF",boxShadow: active?"0 1px 3px rgba(0,0,0,.08)":"none"});
+
+  return (
+    <div style={{minHeight:"100vh",background:"#F9FAFB",display:"flex",flexDirection:"column"}}>
+      {/* Header */}
+      <div style={{background:"#fff",borderBottom:"3px solid #DC2626",padding:"12px 24px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontSize:18,fontWeight:700,color:"#DC2626"}}>Zaggle</div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:14,fontWeight:700,color:"#111"}}>Objectives and Key Results (OKRs)</div>
+          <div style={{fontSize:11,color:"#9CA3AF",marginBottom:4}}>{data.northStar.timeline || "FY 2026-27"} · Confidential</div>
+          <SyncIndicator lastSynced={lastSynced} now={now} syncing={syncing} onRefresh={onRefresh}/>
+        </div>
+      </div>
+      {/* Tabs */}
+      <div style={{background:"#fff",borderBottom:"1px solid #E5E7EB",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex"}}>
+          {[["ns","North Star Vision"],["org","Organization OKRs"],["dept","Department OKRs"]].map(([k,l]) => (
+            <button key={k} onClick={() => {setTab(k); setSelectedOkr(null);}} style={tabStyle(tab===k)}>{l}</button>
+          ))}
+        </div>
+        <div style={{display:"flex",background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:8,padding:4,gap:4}}>
+          {[["table","Table"],["hierarchy","Hierarchy"]].map(([k,l]) => (
+            <button key={k} onClick={() => setView(k)} style={viewBtnStyle(view===k)}>{l}</button>
+          ))}
+        </div>
+      </div>
+      {/* Dept sub-tabs */}
+      {tab==="dept" && (
+        <div style={{background:"#fff",borderBottom:"2px solid #E5E7EB",padding:"0 16px",display:"flex",overflowX:"auto"}}>
+          {data.departments.map(d => (
+            <button key={d} onClick={() => {setSelectedDept(d); setSelectedOkr(null);}}
+              style={{padding:"10px 16px",fontSize:12,fontWeight:600,whiteSpace:"nowrap",border:"none",background:"none",cursor:"pointer",borderBottom: selectedDept===d?"3px solid #DC2626":"3px solid transparent",color: selectedDept===d?"#DC2626":"#9CA3AF",flexShrink:0}}>{d}</button>
+          ))}
+        </div>
+      )}
+      {/* Sidebar + Content */}
+      <div style={{display:"flex",flex:1,minHeight:0}}>
+        <div style={{width:320,flexShrink:0,background:"#fff",borderRight:"1px solid #E5E7EB",overflowY:"auto"}}>
+          <div style={{padding:"16px 16px 8px",fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"#9CA3AF"}}>
+            {tab==="ns"?"North Star Vision":tab==="org"?"Organization OKRs":selectedDept}
+          </div>
+          {tab==="ns" ? (
+            <div style={{padding:12}}>
+              <div style={{display:"flex",gap:10,alignItems:"flex-start",padding:"10px 12px",background:"#FEF2F2",borderLeft:"3px solid #DC2626",borderRadius:"0 8px 8px 0",cursor:"pointer"}} onClick={() => setSelectedOkr("ns")}>
+                <GoalIcon color="#DC2626"/>
+                <span style={{fontSize:12,fontWeight:600,color:"#111",lineHeight:1.4}}>{data.northStar.vision}</span>
+              </div>
+            </div>
+          ) : currentOkrs.map((okr,i) => (
+            <div key={okr.id}>
+              <div style={{display:"flex",gap:10,alignItems:"flex-start",padding:"12px 16px",cursor:"pointer",borderLeft: selectedOkr===okr.id?"3px solid #DC2626":"3px solid transparent",background: selectedOkr===okr.id?"#FEF2F2":"transparent",transition:"background .12s"}}
+                onClick={() => setSelectedOkr(okr.id)}
+                onMouseOver={e => { if(selectedOkr!==okr.id) e.currentTarget.style.background="#F9FAFB"; }}
+                onMouseOut={e => { if(selectedOkr!==okr.id) e.currentTarget.style.background="transparent"; }}>
+                <GoalIcon size={13} color={selectedOkr===okr.id?"#DC2626":"#9CA3AF"}/>
+                <div>
+                  <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color: selectedOkr===okr.id?"#DC2626":"#9CA3AF",marginBottom:3}}>Objective {i+1}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:"#111",lineHeight:1.4}}>{okr.objective}</div>
+                </div>
+              </div>
+              {i < currentOkrs.length-1 && <div style={{height:1,background:"#F3F4F6",margin:"0 16px"}}/>}
+            </div>
+          ))}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:32}}>
+          {tab==="ns" ? (
+            <div style={{maxWidth:640,margin:"0 auto",background:"#fff",border:"2px solid #DC2626",borderRadius:16,padding:32,boxShadow:"0 2px 12px rgba(220,38,38,.06)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"#DC2626",marginBottom:12}}>
+                <GoalIcon size={13} color="#DC2626"/> North Star Vision · {data.northStar.timeline}
+              </div>
+              <div style={{fontSize:20,fontWeight:800,color:"#111",lineHeight:1.35,marginBottom:16}}>{data.northStar.vision}</div>
+              <div style={{fontSize:14,color:"#6B7280",lineHeight:1.7}}>{data.northStar.description}</div>
+            </div>
+          ) : !activeOkr ? (
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",color:"#9CA3AF",gap:12}}>
+              <GoalIcon size={32} color="#D1D5DB"/>
+              <p style={{fontSize:13}}>Select an OKR from the left to view its Key Results</p>
+            </div>
+          ) : (
+            <div>
+              <h1 style={{fontSize:18,fontWeight:700,color:"#111",marginBottom:8,lineHeight:1.35}}>{activeOkr.objective}</h1>
+              <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+                <span style={{fontSize:11,color:"#6B7280",background:"#F3F4F6",border:"1px solid #E5E7EB",padding:"2px 10px",borderRadius:20}}>Timeline: {activeOkr.timeline}</span>
+                <span style={{fontSize:11,color:"#6B7280",background:"#F3F4F6",border:"1px solid #E5E7EB",padding:"2px 10px",borderRadius:20}}>{activeOkr.krs.length} Key Results</span>
+              </div>
+              {linkedOrg && (
+                <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:12}}>
+                  <span>🔗</span>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color:"#DC2626",marginBottom:4}}>Linked to Org OKR</div>
+                    <span onClick={() => navToOrg(linkedOrg.id)} style={{fontSize:13,fontWeight:600,color:"#111",borderBottom:"1.5px dashed #EF4444",cursor:"pointer"}}>{linkedOrg.objective}</span>
+                  </div>
+                </div>
+              )}
+              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",color:"#9CA3AF",marginBottom:10}}>Key Results</div>
+              <KRTable krs={activeOkr.krs}/>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ROOT: DATA LOADING / ERROR HANDLING ───
+function Root() {
+  const [status, setStatus] = useState("loading"); // loading | error | ready
+  const [errorInfo, setErrorInfo] = useState(null);
+  const [data, setData] = useState(null);
+  const [lastSynced, setLastSynced] = useState(null);
+  const [now, setNow] = useState(Date.now());
+  const [syncing, setSyncing] = useState(false);
+
+  const loadData = async (isBackground) => {
+    if (isBackground) setSyncing(true); else setStatus("loading");
+    try {
+      if (!ONEDRIVE_SHARE_URL || ONEDRIVE_SHARE_URL === "PASTE_YOUR_ONEDRIVE_SHARE_LINK_HERE") {
+        throw { kind: "config" };
+      }
+      const url = toDirectDownloadUrl(ONEDRIVE_SHARE_URL);
+      let resp;
+      try {
+        resp = await fetch(url, { cache: "no-store" });
+      } catch (e) {
+        throw { kind: "fetch", detail: e.message };
+      }
+      if (!resp.ok) throw { kind: "fetch", detail: `HTTP ${resp.status} ${resp.statusText}` };
+      const buf = await resp.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const parsed = parseWorkbook(wb);
+      setData(parsed);
+      setStatus("ready");
+      setLastSynced(Date.now());
+    } catch (err) {
+      if (!isBackground) {
+        setErrorInfo(err && err.kind ? err : { kind: "unknown", detail: err && err.message ? err.message : String(err) });
+        setStatus("error");
+      }
+      // Background refresh failures are silent - keep showing last good data.
+    } finally {
+      if (isBackground) setSyncing(false);
+    }
+  };
+
+  useEffect(() => { loadData(false); }, []);
+
+  useEffect(() => {
+    const refreshTimer = setInterval(() => loadData(true), AUTO_REFRESH_MS);
+    const tickTimer = setInterval(() => setNow(Date.now()), 15000);
+    return () => { clearInterval(refreshTimer); clearInterval(tickTimer); };
+  }, []);
+
+  if (status === "loading") return <LoadingScreen/>;
+  if (status === "error") return <ErrorScreen info={errorInfo} onRetry={() => loadData(false)}/>;
+  return <MainApp data={data} lastSynced={lastSynced} now={now} syncing={syncing} onRefresh={() => loadData(false)}/>;
+}
+
+ReactDOM.render(<Root/>, document.getElementById('root'));
+</script>
+</body>
+</html>
