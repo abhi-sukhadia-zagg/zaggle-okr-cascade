@@ -90,24 +90,57 @@ const buildKr = (r) => ({
   owner: cell(r["KR Owner"]),
 });
 
+// ─── COLUMN VALIDATION ───
+const REQUIRED_COLUMNS = {
+  "North Star":   ["Vision Statement", "Description", "Timeline"],
+  "Org OKRs":    ["Org OKR ID", "Objective", "Timeline", "Sr. No.", "EPIC-G", "Key Result", "Measure", "Target", "KR Owner"],
+  "Dept OKRs":   ["Department", "Dept OKR ID", "Objective", "Timeline", "Linked Org OKR ID", "Sr. No.", "EPIC-G", "Key Result", "Measure", "Target", "KR Owner"],
+  "Departments": ["Department Name", "Display Order"],
+  // "KR Tooltip" is optional — omitting it just disables the hover tooltip on Sr. No. cells
+};
+
+function validateColumns(sheetName, rows) {
+  if (!rows.length) return; // empty sheet caught separately
+  const actual = Object.keys(rows[0]);
+  const expected = REQUIRED_COLUMNS[sheetName] || [];
+  const missing = expected.filter((col) => !actual.includes(col));
+  if (missing.length) {
+    throw {
+      kind: "columns",
+      sheet: sheetName,
+      missing,
+      found: actual,
+      detail:
+        `Sheet "${sheetName}" is missing column(s): ${missing.map(c => `"${c}"`).join(", ")}.\n` +
+        `Columns found: ${actual.map(c => `"${c}"`).join(", ")}.`,
+    };
+  }
+}
+
 function parseWorkbook(wb) {
   const missing = REQUIRED_SHEETS.filter((s) => !wb.SheetNames.includes(s));
   if (missing.length) {
-    throw { kind: "structure", detail: `Missing sheet(s): ${missing.join(", ")}` };
+    throw { kind: "structure", detail: `Missing sheet(s): ${missing.join(", ")}. Make sure you are using the correct OKR_Cascade_Data_Input template file.` };
   }
   const sheet = (name) => XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: "" });
 
-  const nsRow = sheet("North Star")[0] || {};
+  const nsRows = sheet("North Star");
+  if (!nsRows.length) throw { kind: "structure", detail: `The "North Star" sheet has no data rows.` };
+  validateColumns("North Star", nsRows);
+  const nsRow = nsRows[0];
   const northStar = {
     vision: cell(nsRow["Vision Statement"]),
     description: cell(nsRow["Description"]),
     timeline: cell(nsRow["Timeline"]),
   };
   if (!northStar.vision) {
-    throw { kind: "structure", detail: `"North Star" sheet is missing a "Vision Statement" value.` };
+    throw { kind: "structure", detail: `The "North Star" sheet has no "Vision Statement" value in row 2.` };
   }
 
-  const orgOkrs = groupRows(sheet("Org OKRs"), {
+  const orgRows = sheet("Org OKRs");
+  if (!orgRows.length) throw { kind: "structure", detail: `The "Org OKRs" sheet has no data rows.` };
+  validateColumns("Org OKRs", orgRows);
+  const orgOkrs = groupRows(orgRows, {
     idField: "Org OKR ID",
     carryFields: ["Objective", "Timeline"],
     buildKr,
@@ -115,11 +148,11 @@ function parseWorkbook(wb) {
     g.krs.sort((a, b) => Number(a.srNo) - Number(b.srNo));
     return { id: g.id, objective: g["Objective"] || "", timeline: g["Timeline"] || "", krs: g.krs };
   });
-  if (!orgOkrs.length) {
-    throw { kind: "structure", detail: `"Org OKRs" sheet has no rows.` };
-  }
 
-  const deptGroups = groupRows(sheet("Dept OKRs"), {
+  const deptRows = sheet("Dept OKRs");
+  if (!deptRows.length) throw { kind: "structure", detail: `The "Dept OKRs" sheet has no data rows.` };
+  validateColumns("Dept OKRs", deptRows);
+  const deptGroups = groupRows(deptRows, {
     idField: "Dept OKR ID",
     carryFields: ["Department", "Objective", "Timeline", "Linked Org OKR ID"],
     buildKr,
@@ -142,13 +175,13 @@ function parseWorkbook(wb) {
     deptOkrsByDept[o.department].push(o);
   });
 
-  const declaredDepts = sheet("Departments")
+  const deptsSheetRows = sheet("Departments");
+  if (!deptsSheetRows.length) throw { kind: "structure", detail: `The "Departments" sheet has no data rows.` };
+  validateColumns("Departments", deptsSheetRows);
+  const declaredDepts = deptsSheetRows
     .filter((r) => cell(r["Department Name"]))
     .map((r) => ({ name: cell(r["Department Name"]), order: Number(r["Display Order"]) || 0 }))
     .sort((a, b) => a.order - b.order);
-  if (!declaredDepts.length) {
-    throw { kind: "structure", detail: `"Departments" sheet has no rows.` };
-  }
 
   const declaredNames = declaredDepts.map((d) => d.name);
   const extraNames = Object.keys(deptOkrsByDept).filter((n) => !declaredNames.includes(n)).sort();
@@ -208,8 +241,8 @@ const SrNoCell = ({kr}) => {
 
 const KRTable = ({krs}) => (
   <div style={{borderRadius:10,border:"1px solid #E5E7EB",overflow:"visible",background:"#fff"}}>
-    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-      <thead><tr style={{background:"#DC2626",color:"#fff",fontSize:10.5,textTransform:"uppercase",letterSpacing:".07em"}}>
+    <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
+      <thead><tr style={{background:"#DC2626",color:"#fff",fontSize:12,textTransform:"uppercase",letterSpacing:".07em"}}>
         <th style={{padding:"10px 12px",textAlign:"center",width:56,borderTopLeftRadius:9}}>Sr. No.</th>
         <th style={{padding:"10px 12px",textAlign:"center",width:70}}>EPIC-G</th>
         <th style={{padding:"10px 12px",textAlign:"left"}}>Key Result</th>
@@ -220,11 +253,11 @@ const KRTable = ({krs}) => (
       <tbody>{krs.length ? krs.map((kr,i) => (
         <tr key={i} style={{borderTop:"1px solid #F3F4F6"}}>
           <SrNoCell kr={kr}/>
-          <td style={{padding:"12px",textAlign:"center",fontSize:11,fontWeight:700,color:"#7C4D00",background:"#FEF3D7"}}>{kr.epic||"-"}</td>
+          <td style={{padding:"12px",textAlign:"center",fontSize:13,fontWeight:700,color:"#7C4D00",background:"#FEF3D7"}}>{kr.epic||"-"}</td>
           <td style={{padding:"12px",color:"#111"}}>{kr.keyResult}</td>
-          <td style={{padding:"12px",color:"#6B7280",fontSize:12}}>{kr.measure}</td>
+          <td style={{padding:"12px",color:"#6B7280",fontSize:13}}>{kr.measure}</td>
           <td style={{padding:"12px",fontWeight:600,color:"#111",whiteSpace:"nowrap"}}>{kr.target}</td>
-          <td style={{padding:"12px",color:"#6B7280",fontSize:12,whiteSpace:"nowrap"}}>{kr.owner}</td>
+          <td style={{padding:"12px",color:"#6B7280",fontSize:13,whiteSpace:"nowrap"}}>{kr.owner}</td>
         </tr>
       )) : <tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#9CA3AF",fontStyle:"italic"}}>No Key Results defined yet</td></tr>}</tbody>
     </table>
@@ -234,7 +267,7 @@ const KRTable = ({krs}) => (
 const DeptGroupColumn = ({dept, okrs, onNavigate}) => (
   <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:240,flexShrink:0}}>
     <div style={{border:"2px dashed #E5E7EB",borderRadius:12,overflow:"hidden",background:"#fff",width:240}}>
-      <div style={{background:"#F9FAFB",borderBottom:"1px solid #E5E7EB",padding:"8px 12px",fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:".07em",display:"flex",alignItems:"center",gap:6}}>
+      <div style={{background:"#F9FAFB",borderBottom:"1px solid #E5E7EB",padding:"8px 12px",fontSize:11,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:".07em",display:"flex",alignItems:"center",gap:6}}>
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" width="4" height="4" rx=".5" fill="currentColor"/><rect y="6" width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" y="6" width="4" height="4" rx=".5" fill="currentColor"/></svg>
         {dept}
       </div>
@@ -246,9 +279,9 @@ const DeptGroupColumn = ({dept, okrs, onNavigate}) => (
               style={{border:"1px solid #E5E7EB",borderRadius:8,padding:12,cursor:"pointer",transition:"all .15s"}}
               onMouseOver={e => {e.currentTarget.style.borderColor="#FCA5A5";e.currentTarget.style.boxShadow="0 2px 8px rgba(232,40,26,.08)"}}
               onMouseOut={e => {e.currentTarget.style.borderColor="#E5E7EB";e.currentTarget.style.boxShadow="none"}}>
-              <div style={{fontSize:11,fontWeight:600,color:"#111",lineHeight:1.35,marginBottom:8}}>{okr.objective}</div>
+              <div style={{fontSize:13,fontWeight:600,color:"#111",lineHeight:1.4,marginBottom:8}}>{okr.objective}</div>
               <button onClick={e => {e.stopPropagation(); onNavigate(okr.id, dept);}}
-                style={{fontSize:10,fontWeight:700,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:20,padding:"2px 10px",cursor:"pointer"}}>
+                style={{fontSize:11,fontWeight:700,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:20,padding:"2px 10px",cursor:"pointer"}}>
                 {okr.krs.length} KRs →
               </button>
             </div>
@@ -271,13 +304,13 @@ const OrgHierBlock = ({orgOkr, expanded, onToggle, onNavOrg, onNavDept, getLinke
         style={{border: expanded ? "2px solid #DC2626" : "2px solid #DC2626", background: expanded ? "#FEF2F2" : "#fff", borderRadius:12, padding:14, width:230, cursor:"pointer", transition:"all .15s", boxShadow: expanded ? "0 4px 16px rgba(220,38,38,.12)" : "none"}}
         onMouseOver={e => { if(!expanded) e.currentTarget.style.boxShadow="0 4px 16px rgba(220,38,38,.12)"; }}
         onMouseOut={e => { if(!expanded) e.currentTarget.style.boxShadow="none"; }}>
-        <div style={{fontSize:12,fontWeight:700,color:"#111",lineHeight:1.35,marginBottom:10}}>{orgOkr.objective}</div>
+        <div style={{fontSize:13,fontWeight:700,color:"#111",lineHeight:1.4,marginBottom:10}}>{orgOkr.objective}</div>
         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
           <button onClick={e => {e.stopPropagation(); onNavOrg(orgOkr.id);}}
-            style={{fontSize:10,fontWeight:700,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:20,padding:"2px 10px",cursor:"pointer"}}>
+            style={{fontSize:11,fontWeight:700,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:20,padding:"2px 10px",cursor:"pointer"}}>
             {orgOkr.krs.length} KRs →
           </button>
-          <span style={{fontSize:10,color:"#9CA3AF",background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:20,padding:"2px 8px"}}>{linked.length} depts</span>
+          <span style={{fontSize:11,color:"#9CA3AF",background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:20,padding:"2px 8px"}}>{deptOrder.length} depts</span>
         </div>
       </div>
 
@@ -330,15 +363,19 @@ const LoadingScreen = () => (
 const ERROR_COPY = {
   config: {
     title: "Configuration needed",
-    body: `Set the ONEDRIVE_SHARE_URL variable near the top of this file to your OneDrive share link for OKR_Cascade_Data_Input.xlsx.`,
+    body: `Set the ONEDRIVE_SHARE_URL variable near the top of this file to the path or share link for OKR_Cascade_Data_Input_final.xlsx.`,
   },
   fetch: {
     title: "Couldn't load the OKR data",
-    body: `Check that the OneDrive file is shared as "Anyone with the link can view", that the link is correct, and that you're online. Then try again.`,
+    body: `Check that the file is accessible and that you're online. Then try again.`,
   },
   structure: {
-    title: "Unexpected file structure",
-    body: `The Excel file doesn't match the expected template. Make sure you're using the OKR_Cascade_Data_Input.xlsx template and haven't renamed any sheets or columns.`,
+    title: "File structure problem",
+    body: `The Excel file doesn't match the expected template. Make sure you're using the correct OKR_Cascade_Data_Input template and haven't renamed any sheets.`,
+  },
+  columns: {
+    title: "Column mismatch detected",
+    body: null, // rendered custom below
   },
   unknown: {
     title: "Something went wrong",
@@ -349,14 +386,44 @@ const ERROR_COPY = {
 const ErrorScreen = ({info, onRetry}) => {
   const kind = (info && info.kind) || "unknown";
   const copy = ERROR_COPY[kind] || ERROR_COPY.unknown;
+  const isColumnError = kind === "columns";
+
   return (
     <CenteredScreen>
       <div style={{fontSize:22,fontWeight:800,color:"#DC2626",marginBottom:16}}>Zaggle</div>
       <div style={{fontSize:16,fontWeight:700,color:"#111",marginBottom:8}}>{copy.title}</div>
-      <div style={{fontSize:13,color:"#6B7280",lineHeight:1.6,marginBottom:12}}>{copy.body}</div>
-      {info && info.detail && (
-        <div style={{fontSize:11,color:"#9CA3AF",background:"#F9FAFB",border:"1px solid #E5E7EB",borderRadius:8,padding:"8px 10px",marginBottom:16,textAlign:"left",wordBreak:"break-word"}}>{info.detail}</div>
+
+      {isColumnError ? (
+        <div style={{textAlign:"left",marginBottom:16}}>
+          <div style={{fontSize:13,color:"#6B7280",lineHeight:1.6,marginBottom:12}}>
+            The <strong>"{info.sheet}"</strong> sheet has columns that don't match the required template. Fix the column names in your Excel file and try again.
+          </div>
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#DC2626",marginBottom:4}}>Missing columns:</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {(info.missing||[]).map(c => (
+                <span key={c} style={{fontSize:12,background:"#FEF2F2",border:"1px solid #FECACA",color:"#991B1B",borderRadius:6,padding:"2px 10px",fontFamily:"monospace"}}>{c}</span>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:"#6B7280",marginBottom:4}}>Columns found in your file:</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {(info.found||[]).map(c => (
+                <span key={c} style={{fontSize:12,background:"#F3F4F6",border:"1px solid #E5E7EB",color:"#374151",borderRadius:6,padding:"2px 10px",fontFamily:"monospace"}}>{c}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{fontSize:13,color:"#6B7280",lineHeight:1.6,marginBottom:12}}>{copy.body}</div>
+          {info && info.detail && (
+            <div style={{fontSize:11,color:"#9CA3AF",background:"#F9FAFB",border:"1px solid #E5E7EB",borderRadius:8,padding:"8px 10px",marginBottom:16,textAlign:"left",wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{info.detail}</div>
+          )}
+        </>
       )}
+
       <button onClick={onRetry} style={{fontSize:13,fontWeight:600,color:"#fff",background:"#DC2626",border:"none",borderRadius:8,padding:"8px 20px",cursor:"pointer"}}>
         Try Again
       </button>
@@ -410,8 +477,8 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
         <div style={{overflowX:"auto",overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"32px 32px 80px"}}>
           <div style={{display:"inline-flex",flexDirection:"column",alignItems:"center",minWidth:"max-content"}}>
             <div style={{background:"#1A1A2E",borderRadius:12,padding:"16px 32px",textAlign:"center",width:460,boxShadow:"0 4px 20px rgba(26,26,46,.18)"}}>
-              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".09em",color:"#F5ADA8",marginBottom:6}}>◎ North Star Vision</div>
-              <div style={{fontSize:15,fontWeight:800,color:"#fff",lineHeight:1.35}}>{data.northStar.vision}</div>
+              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".09em",color:"#F5ADA8",marginBottom:6}}>◎ North Star Vision</div>
+              <div style={{fontSize:16,fontWeight:800,color:"#fff",lineHeight:1.35}}>{data.northStar.vision}</div>
             </div>
             <VLine h={24} color="#B91C1C"/>
             {(() => {
@@ -439,17 +506,17 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
   }
 
   // ─── TABLE VIEW ───
-  const tabStyle = (active) => ({padding:"14px 20px",fontSize:13,fontWeight:600,cursor:"pointer",color: active?"#DC2626":"#9CA3AF",background:"none",border:"none",borderBottom: active?"3px solid #DC2626":"3px solid transparent"});
-  const viewBtnStyle = (active) => ({padding:"5px 12px",fontSize:12,fontWeight:600,borderRadius:6,cursor:"pointer",border:"none",background: active?"#fff":"transparent",color: active?"#DC2626":"#9CA3AF",boxShadow: active?"0 1px 3px rgba(0,0,0,.08)":"none"});
+  const tabStyle = (active) => ({padding:"14px 20px",fontSize:14,fontWeight:600,cursor:"pointer",color: active?"#DC2626":"#9CA3AF",background:"none",border:"none",borderBottom: active?"3px solid #DC2626":"3px solid transparent"});
+  const viewBtnStyle = (active) => ({padding:"5px 12px",fontSize:13,fontWeight:600,borderRadius:6,cursor:"pointer",border:"none",background: active?"#fff":"transparent",color: active?"#DC2626":"#9CA3AF",boxShadow: active?"0 1px 3px rgba(0,0,0,.08)":"none"});
 
   return (
     <div style={{minHeight:"100vh",background:"#F9FAFB",display:"flex",flexDirection:"column"}}>
       {/* Header */}
       <div style={{background:"#fff",borderBottom:"3px solid #DC2626",padding:"12px 24px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div style={{fontSize:18,fontWeight:700,color:"#DC2626"}}>Zaggle</div>
+        <div style={{fontSize:20,fontWeight:700,color:"#DC2626"}}>Zaggle</div>
         <div style={{textAlign:"right"}}>
-          <div style={{fontSize:14,fontWeight:700,color:"#111"}}>Objectives and Key Results (OKRs)</div>
-          <div style={{fontSize:11,color:"#9CA3AF",marginBottom:4}}>{data.northStar.timeline || "FY 2026-27"} · Confidential</div>
+          <div style={{fontSize:15,fontWeight:700,color:"#111"}}>Objectives and Key Results (OKRs)</div>
+          <div style={{fontSize:12,color:"#9CA3AF",marginBottom:4}}>{data.northStar.timeline || "FY 2026-27"} · Confidential</div>
           <SyncIndicator lastSynced={lastSynced} now={now} syncing={syncing} onRefresh={onRefresh}/>
         </div>
       </div>
@@ -471,14 +538,14 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
         <div style={{background:"#fff",borderBottom:"2px solid #E5E7EB",padding:"0 16px",display:"flex",overflowX:"auto"}}>
           {data.departments.map(d => (
             <button key={d} onClick={() => {setSelectedDept(d); setSelectedOkr(null);}}
-              style={{padding:"10px 16px",fontSize:12,fontWeight:600,whiteSpace:"nowrap",border:"none",background:"none",cursor:"pointer",borderBottom: selectedDept===d?"3px solid #DC2626":"3px solid transparent",color: selectedDept===d?"#DC2626":"#9CA3AF",flexShrink:0}}>{d}</button>
+              style={{padding:"10px 16px",fontSize:13,fontWeight:600,whiteSpace:"nowrap",border:"none",background:"none",cursor:"pointer",borderBottom: selectedDept===d?"3px solid #DC2626":"3px solid transparent",color: selectedDept===d?"#DC2626":"#9CA3AF",flexShrink:0}}>{d}</button>
           ))}
         </div>
       )}
       {/* Sidebar + Content */}
       <div style={{display:"flex",flex:1,minHeight:0}}>
         <div style={{width:320,flexShrink:0,background:"#fff",borderRight:"1px solid #E5E7EB",overflowY:"auto"}}>
-          <div style={{padding:"16px 16px 8px",fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"#9CA3AF"}}>
+          <div style={{padding:"16px 16px 8px",fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"#9CA3AF"}}>
             {tab==="ns"?"North Star Vision":tab==="org"?"Organization OKRs":selectedDept}
           </div>
           {tab==="ns" ? (
@@ -496,8 +563,8 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
                 onMouseOut={e => { if(selectedOkr!==okr.id) e.currentTarget.style.background="transparent"; }}>
                 <GoalIcon size={13} color={selectedOkr===okr.id?"#DC2626":"#9CA3AF"}/>
                 <div>
-                  <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color: selectedOkr===okr.id?"#DC2626":"#9CA3AF",marginBottom:3}}>Objective {i+1}</div>
-                  <div style={{fontSize:12,fontWeight:600,color:"#111",lineHeight:1.4}}>{okr.objective}</div>
+                  <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color: selectedOkr===okr.id?"#DC2626":"#9CA3AF",marginBottom:3}}>Objective {i+1}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:"#111",lineHeight:1.4}}>{okr.objective}</div>
                 </div>
               </div>
               {i < currentOkrs.length-1 && <div style={{height:1,background:"#F3F4F6",margin:"0 16px"}}/>}
@@ -507,11 +574,11 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
         <div style={{flex:1,overflowY:"auto",padding:32}}>
           {tab==="ns" ? (
             <div style={{maxWidth:640,margin:"0 auto",background:"#fff",border:"2px solid #DC2626",borderRadius:16,padding:32,boxShadow:"0 2px 12px rgba(220,38,38,.06)"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"#DC2626",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"#DC2626",marginBottom:12}}>
                 <GoalIcon size={13} color="#DC2626"/> North Star Vision · {data.northStar.timeline}
               </div>
-              <div style={{fontSize:20,fontWeight:800,color:"#111",lineHeight:1.35,marginBottom:16}}>{data.northStar.vision}</div>
-              <div style={{fontSize:14,color:"#6B7280",lineHeight:1.7}}>{data.northStar.description}</div>
+              <div style={{fontSize:22,fontWeight:800,color:"#111",lineHeight:1.35,marginBottom:16}}>{data.northStar.vision}</div>
+              <div style={{fontSize:15,color:"#6B7280",lineHeight:1.7}}>{data.northStar.description}</div>
             </div>
           ) : !activeOkr ? (
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",color:"#9CA3AF",gap:12}}>
@@ -520,21 +587,21 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
             </div>
           ) : (
             <div>
-              <h1 style={{fontSize:18,fontWeight:700,color:"#111",marginBottom:8,lineHeight:1.35}}>{activeOkr.objective}</h1>
+              <h1 style={{fontSize:20,fontWeight:700,color:"#111",marginBottom:8,lineHeight:1.35}}>{activeOkr.objective}</h1>
               <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
-                <span style={{fontSize:11,color:"#6B7280",background:"#F3F4F6",border:"1px solid #E5E7EB",padding:"2px 10px",borderRadius:20}}>Timeline: {activeOkr.timeline}</span>
-                <span style={{fontSize:11,color:"#6B7280",background:"#F3F4F6",border:"1px solid #E5E7EB",padding:"2px 10px",borderRadius:20}}>{activeOkr.krs.length} Key Results</span>
+                <span style={{fontSize:12,color:"#6B7280",background:"#F3F4F6",border:"1px solid #E5E7EB",padding:"2px 10px",borderRadius:20}}>Timeline: {activeOkr.timeline}</span>
+                <span style={{fontSize:12,color:"#6B7280",background:"#F3F4F6",border:"1px solid #E5E7EB",padding:"2px 10px",borderRadius:20}}>{activeOkr.krs.length} Key Results</span>
               </div>
               {linkedOrg && (
                 <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:12}}>
                   <span>🔗</span>
                   <div>
-                    <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color:"#DC2626",marginBottom:4}}>Linked to Org OKR</div>
-                    <span onClick={() => navToOrg(linkedOrg.id)} style={{fontSize:13,fontWeight:600,color:"#111",borderBottom:"1.5px dashed #EF4444",cursor:"pointer"}}>{linkedOrg.objective}</span>
+                    <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color:"#DC2626",marginBottom:4}}>Linked to Org OKR</div>
+                    <span onClick={() => navToOrg(linkedOrg.id)} style={{fontSize:14,fontWeight:600,color:"#111",borderBottom:"1.5px dashed #EF4444",cursor:"pointer"}}>{linkedOrg.objective}</span>
                   </div>
                 </div>
               )}
-              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",color:"#9CA3AF",marginBottom:10}}>Key Results</div>
+              <div style={{fontSize:12,fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",color:"#9CA3AF",marginBottom:10}}>Key Results</div>
               <KRTable krs={activeOkr.krs}/>
             </div>
           )}
