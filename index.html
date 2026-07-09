@@ -643,19 +643,32 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
             </div>
           ) : (
             <div>
+              {linkedOrg && (
+                <div style={{marginBottom:12}}>
+                  <div onClick={() => navToOrg(linkedOrg.id)}
+                    style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"12px 16px",display:"flex",alignItems:"flex-start",gap:12,cursor:"pointer",transition:"background .12s"}}
+                    onMouseOver={e => e.currentTarget.style.background="#FEE2E1"}
+                    onMouseOut={e => e.currentTarget.style.background="#FEF2F2"}>
+                    <span>🔗</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color:"#DC2626",marginBottom:4}}>Parent · Org OKR {linkedOrg.id}</div>
+                      <span style={{fontSize:14,fontWeight:600,color:"#111",borderBottom:"1.5px dashed #EF4444"}}>{linkedOrg.objective}</span>
+                    </div>
+                    <span style={{fontSize:11,color:"#DC2626",fontWeight:600,alignSelf:"center"}}>Open →</span>
+                  </div>
+                  <div style={{textAlign:"center",fontSize:18,color:"#FCA5A5",lineHeight:1,margin:"4px 0"}}>↓</div>
+                </div>
+              )}
+              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",color:"#9CA3AF",marginBottom:6}}>
+                {linkedOrg ? "Department Objective" : "Organization Objective"}
+              </div>
               <h1 style={{fontSize:20,fontWeight:700,color:"#111",marginBottom:8,lineHeight:1.35}}>{activeOkr.objective}</h1>
               <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
                 <span style={{fontSize:12,color:"#6B7280",background:"#F3F4F6",border:"1px solid #E5E7EB",padding:"2px 10px",borderRadius:20}}>Timeline: {activeOkr.timeline}</span>
                 <span style={{fontSize:12,color:"#6B7280",background:"#F3F4F6",border:"1px solid #E5E7EB",padding:"2px 10px",borderRadius:20}}>{activeOkr.krs.length} Key Results</span>
               </div>
               {linkedOrg && (
-                <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:12}}>
-                  <span>🔗</span>
-                  <div>
-                    <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color:"#DC2626",marginBottom:4}}>Linked to Org OKR</div>
-                    <span onClick={() => navToOrg(linkedOrg.id)} style={{fontSize:14,fontWeight:600,color:"#111",borderBottom:"1.5px dashed #EF4444",cursor:"pointer"}}>{linkedOrg.objective}</span>
-                  </div>
-                </div>
+                <div style={{textAlign:"center",fontSize:18,color:"#FCA5A5",lineHeight:1,marginBottom:6}}>↓</div>
               )}
               <div style={{fontSize:12,fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",color:"#9CA3AF",marginBottom:10}}>Key Results</div>
               <KRTable krs={activeOkr.krs}/>
