@@ -577,8 +577,14 @@ function MainApp({data, lastSynced, now, syncing, onRefresh}) {
           ))}
         </div>
         <div style={{display:"flex",background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:8,padding:4,gap:4}}>
-          {[["table","Table"],["hierarchy","Hierarchy"]].map(([k,l]) => (
-            <button key={k} onClick={() => setView(k)} style={viewBtnStyle(view===k)}>{l}</button>
+          {[["table","Table",false],["hierarchy","Hierarchy",true]].map(([k,l,disabled]) => (
+            <button key={k}
+              onClick={() => !disabled && setView(k)}
+              disabled={disabled}
+              title={disabled ? "Hierarchy view is temporarily disabled" : ""}
+              style={{...viewBtnStyle(view===k), cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.45 : 1}}>
+              {l}
+            </button>
           ))}
         </div>
       </div>
